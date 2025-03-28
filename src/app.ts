@@ -1,0 +1,43 @@
+import express from "express";
+import cors from "cors";
+import swaggerDocs from "./utils/swagger";
+import { protectedRoutes, publicRoutes } from "./routes";
+import scalarAPISpec from "./utils/scalar";
+
+const app = express();
+
+app.use(cors({ origin: "http://localhost:3000", credentials: true }));
+app.use(express.json());
+app.use("/", protectedRoutes);
+app.use("/public", publicRoutes);
+
+const PORT = process.env.PORT || 3001;
+
+app.get("/docs", (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>API Reference</title>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </head>
+      <body>
+        <script 
+          id="api-reference"
+          data-url="/openapi.json"
+          src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+      </body>
+    </html>
+  `);
+});
+
+app.get("/openapi.json", (req, res) => {
+  res.json(scalarAPISpec);
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Swagger Docs available at http://localhost:${PORT}/docs`);
+  swaggerDocs(app, PORT);
+});
