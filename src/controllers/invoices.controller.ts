@@ -178,8 +178,8 @@ export class InvoicesController {
 
         // console.log("Sending email with invoice attached", data[0]);
         // await sendInvoiceEmail(data[0], "pdfBuffer");
-        // await sendEmail();
-        await MailgunService();
+        await sendEmail();
+        // await MailgunService();
         return res.status(201).json({
           message: "Invoice created successfully and email sent",
           invoice: data[0],
