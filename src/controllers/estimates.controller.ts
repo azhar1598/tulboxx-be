@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { supabase } from "../../supabaseClient";
+import { supabase } from "../supabaseClient";
 import { z } from "zod";
 
 // Define the schema for validation
@@ -16,7 +16,7 @@ const estimationSchema = z.object({
   projectName: z.string().min(1, "Project name is required"),
   customerName: z.string().min(1, "Customer name is required"),
   email: z.string().email("Invalid email format"),
-  phone: z.string(),
+  phone: z.number(),
   address: z.string(),
   type: z.enum(["residential", "commercial"]),
 
@@ -24,7 +24,7 @@ const estimationSchema = z.object({
   serviceType: z.string(),
   problemDescription: z.string(),
   solutionDescription: z.string(),
-  projectEstimate: z.string(),
+  projectEstimate: z.number(),
   projectStartDate: z.string(),
   projectEndDate: z.string(),
   lineItems: z.array(lineItemSchema),
@@ -34,14 +34,47 @@ const estimationSchema = z.object({
   additionalNotes: z.string(),
 });
 
-export class EstimatePublicController {
-  async getPublicEstimates(req: Request, res: Response) {
+export class EstimatesController {
+  async getEstimates(req: Request, res: Response) {
     try {
-      const { data, error } = await supabase.from("estimates").select("*");
+      // Extract pagination parameters from query
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const startIndex = (page - 1) * limit;
+
+      // First, get the total count of records
+      const { count, error: countError } = await supabase
+        .from("estimates")
+        .select("*", { count: "exact", head: true });
+
+      if (countError) throw countError;
+
+      // Then fetch the paginated data
+      const { data, error } = await supabase
+        .from("estimates")
+        .select("*")
+        .range(startIndex, startIndex + limit - 1);
 
       if (error) throw error;
 
-      return res.status(200).json(data);
+      // Calculate pagination metadata
+      const totalRecords = count || 0;
+      const totalPages = Math.ceil(totalRecords / limit);
+
+      // Prepare the response with data and metadata
+      const response = {
+        data,
+        metadata: {
+          totalRecords,
+          recordsPerPage: limit,
+          currentPage: page,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+        },
+      };
+
+      return res.status(200).json(response);
     } catch (error) {
       console.error("Error fetching estimates:", error);
       return res.status(500).json({ error: "Failed to fetch estimates" });

@@ -1,9 +1,9 @@
 import swaggerJSDoc from "swagger-jsdoc";
-import { EstimatePublicController } from "../../controllers/public/estimates.controller";
+import { InvoicesController } from "../controllers/invoices.controller";
 import { Router } from "express";
 
-const estimatePublicRouter = Router();
-const estimatePublicController: any = new EstimatePublicController();
+const invoicesRouter = Router();
+const invoicesController: any = new InvoicesController();
 
 /**
  * @openapi
@@ -21,7 +21,7 @@ const estimatePublicController: any = new EstimatePublicController();
 
 /**
  * @openapi
- * /public/estimates:
+ * /estimates:
  *   get:
  *     summary: Get public estimates
  *     description: Get a list of public estimates
@@ -30,15 +30,24 @@ const estimatePublicController: any = new EstimatePublicController();
 //   estimatePublicController.getPublicEstimates(req, res)
 // );
 
-estimatePublicRouter.get("/", estimatePublicController.getPublicEstimates);
+invoicesRouter.get("/", invoicesController.getInvoices);
 
 /**
  * @openapi
- * /public/estimates:
+ * /estimates:
  *   post:
  *     summary: Create a new estimate
  *     description: Create a new estimate
  */
-estimatePublicRouter.post("/", estimatePublicController.createEstimate);
+invoicesRouter.post("/", invoicesController.createInvoice);
 
-export default estimatePublicRouter;
+/**
+ * @openapi
+ * /estimates/{id}:
+ *   get:
+ *     summary: Get estimate by id
+ *     description: Get an estimate by id
+ */
+invoicesRouter.get("/:id", invoicesController.getInvoiceById);
+
+export default invoicesRouter;

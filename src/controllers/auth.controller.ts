@@ -76,8 +76,8 @@ import { Request, Response } from "express";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseAdmin = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!, // Use service role key for admin operations
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY, // Use service role key for admin operations
   {
     auth: {
       autoRefreshToken: false,
