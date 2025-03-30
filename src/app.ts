@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import swaggerDocs from "./utils/swagger";
-import { protectedRoutes, publicRoutes } from "./routes";
+import { protectedRoutes, publicRoutes, authRoutes } from "./routes";
 import scalarAPISpec from "./utils/scalar";
 
 const app = express();
@@ -10,6 +10,7 @@ app.use(cors({ origin: "http://localhost:3000", credentials: true }));
 app.use(express.json());
 app.use("/", protectedRoutes);
 app.use("/public", publicRoutes);
+app.use("/auth", authRoutes);
 
 const PORT = process.env.PORT || 3001;
 

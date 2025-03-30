@@ -1,6 +1,5 @@
 import { Router } from "express";
 import businessRouter from "./business.routes";
-import authRouter from "./auth.routes";
 import { authMiddleware } from "../middlewares/auth";
 import notificationRouter from "./notification.routes";
 import startupRouter from "./startup.routes";
@@ -12,6 +11,7 @@ import estimatePublicRouter from "./public/estimates.routes";
 import estimatesRouter from "./estimates.routes";
 import invoicesRouter from "./invoices.routes";
 import contentRouter from "./content.routes";
+import authRouter from "./auth.routes";
 
 const routes = Router();
 
@@ -26,7 +26,10 @@ routes.use("/invoices", authMiddleware, invoicesRouter);
 routes.use("/content", authMiddleware, contentRouter);
 
 const publicRoutes = Router();
+const authRoutes = Router();
 
+// Authentication routes (login, register, etc.)
+authRoutes.use("/", authRouter);
 // public routes
 publicRoutes.use("/startup", startupPublicRouter);
 publicRoutes.use("/job", jobPublicRouter);
@@ -40,4 +43,4 @@ publicRoutes.use("/job", jobPublicRouter);
  */
 publicRoutes.use("/estimates", estimatePublicRouter);
 
-export { routes as protectedRoutes, publicRoutes };
+export { routes as protectedRoutes, publicRoutes, authRoutes };

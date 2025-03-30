@@ -109,7 +109,6 @@ export class ContentController {
         use_hashtags: contentData.useHashtags,
         content: generatedContent,
         created_at: new Date().toISOString(),
-        status: "draft",
       };
 
       const { data, error } = await supabase

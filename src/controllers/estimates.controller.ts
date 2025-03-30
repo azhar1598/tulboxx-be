@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { supabase } from "../supabaseClient";
 import { z } from "zod";
+import { generateEstimateWithGemini } from "../utils/aiService";
 
 // Define the schema for validation
 const lineItemSchema = z.object({
@@ -39,7 +40,7 @@ export class EstimatesController {
     try {
       // Extract pagination parameters from query
       const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 10;
+      const limit = parseInt(req.query.limit as string) || 20;
       const startIndex = (page - 1) * limit;
 
       // First, get the total count of records
@@ -94,6 +95,17 @@ export class EstimatesController {
 
       const estimateData = validationResult.data;
 
+      let generatedEstimate;
+      try {
+        generatedEstimate = await generateEstimateWithGemini(estimateData);
+      } catch (apiError: any) {
+        console.error("Gemini API error:", apiError);
+        return res.status(500).json({
+          error: "Failed to generate content with AI",
+          details: apiError.message,
+        });
+      }
+
       // Calculate total amount from line items
       const totalAmount = estimateData.lineItems.reduce(
         (sum, item) => sum + item.totalPrice,
@@ -103,9 +115,9 @@ export class EstimatesController {
       // Add metadata
       const dataToInsert = {
         ...estimateData,
+        ai_generated_estimate: generatedEstimate,
         total_amount: totalAmount,
         created_at: new Date().toISOString(),
-        status: "pending",
       };
 
       // Insert into database

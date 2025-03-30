@@ -39,9 +39,6 @@ const invoiceSchema = z.object({
   // Payment details
   remitPayment: remitPaymentSchema,
 
-  // Optional: Reference to estimate if this invoice is based on an estimate
-  estimateId: z.string().optional(),
-
   // Optional: Additional fields
   additionalNotes: z.string().optional(),
   projectId: z.string(), // Add this field
@@ -52,7 +49,7 @@ export class InvoicesController {
     try {
       // Extract pagination parameters from query
       const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 10;
+      const limit = parseInt(req.query.limit as string) || 20;
       const startIndex = (page - 1) * limit;
 
       // First, get the total count of records
@@ -62,13 +59,26 @@ export class InvoicesController {
 
       if (countError) throw countError;
 
-      // Then fetch the paginated data
+      // Then fetch the paginated data with project name from estimates
       const { data, error } = await supabase
         .from("invoices")
-        .select("*")
+        .select(
+          `
+          *,
+          estimates!project_id (
+            projectName
+          )
+        `
+        )
         .range(startIndex, startIndex + limit - 1);
 
       if (error) throw error;
+
+      // Transform the data to include project_name at the top level
+      const transformedData = data?.map((invoice) => ({
+        ...invoice,
+        project_name: invoice.estimates?.project_name || null,
+      }));
 
       // Calculate pagination metadata
       const totalRecords = count || 0;
@@ -76,7 +86,7 @@ export class InvoicesController {
 
       // Prepare the response with data and metadata
       const response = {
-        data,
+        data: transformedData,
         metadata: {
           totalRecords,
           recordsPerPage: limit,
@@ -294,72 +304,6 @@ export class InvoicesController {
     } catch (error) {
       console.error("Error deleting invoice:", error);
       return res.status(500).json({ error: "Failed to delete invoice" });
-    }
-  }
-
-  async createInvoiceFromEstimate(req: Request, res: Response) {
-    try {
-      const { estimateId } = req.params;
-
-      // Fetch the estimate
-      const { data: estimate, error: estimateError } = await supabase
-        .from("estimates")
-        .select("*")
-        .eq("id", estimateId)
-        .single();
-
-      if (estimateError) {
-        if (estimateError.code === "PGRST116") {
-          return res.status(404).json({ error: "Estimate not found" });
-        }
-        throw estimateError;
-      }
-
-      // Generate invoice data from estimate
-      const invoiceData = {
-        invoiceNumber: `INV-${Date.now().toString().slice(-6)}`,
-        customerName: estimate.customerName,
-        email: estimate.email,
-        phone: estimate.phone || "",
-        address: estimate.address || "",
-        issueDate: new Date().toISOString(),
-        dueDate: new Date(
-          new Date().setDate(new Date().getDate() + 30)
-        ).toISOString(), // Due in 30 days
-        invoiceTotalAmount: estimate.total_amount,
-        lineItems: estimate.lineItems,
-        invoiceSummary: `Invoice for ${estimate.projectName}`,
-        remitPayment: req.body.remitPayment, // This needs to be provided in the request
-        estimateId: estimateId,
-        additionalNotes: estimate.additionalNotes || "",
-        created_at: new Date().toISOString(),
-        status: "unpaid",
-      };
-
-      // Insert into database
-      const { data, error } = await supabase
-        .from("invoices")
-        .insert(invoiceData)
-        .select();
-
-      if (error) throw error;
-
-      // Update estimate status to "invoiced"
-      await supabase
-        .from("estimates")
-        .update({ status: "invoiced", updated_at: new Date().toISOString() })
-        .eq("id", estimateId);
-
-      return res.status(201).json({
-        message: "Invoice created from estimate successfully",
-        invoice: data[0],
-      });
-    } catch (error: any) {
-      console.error("Error creating invoice from estimate:", error);
-      return res.status(500).json({
-        error: "Failed to create invoice from estimate",
-        details: error.message,
-      });
     }
   }
 }

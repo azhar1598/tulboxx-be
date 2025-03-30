@@ -1,15 +1,59 @@
-import { Router, Request, Response } from "express";
-
+import { Router } from "express";
 import { AuthController } from "../controllers/auth.controller";
 
 const authRouter = Router();
-const authController: any = new AuthController();
+const authController = new AuthController();
 
-authRouter.post("/login", (req: any, res: any) =>
-  authController.login(req, res)
-);
+/**
+ * @swagger
+ * /auth/login:
+ *   post:
+ *     summary: Email/password login
+ *     description: Authenticate a user with email and password
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ */
+authRouter.post("/login", async (req, res) => {
+  await authController.login(req, res);
+});
 
-// authRouter.get("/callback", (req: any, res: any) =>
-//   authController.callback(req, res)
-// );
+/**
+ * @swagger
+ * /auth/register:
+ *   post:
+ *     summary: User registration
+ *     description: Register a new user with email and password
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *               name:
+ *                 type: string
+ */
+authRouter.post("/signup", async (req, res) => {
+  await authController.signup(req, res);
+});
+
 export default authRouter;
