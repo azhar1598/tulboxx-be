@@ -14,6 +14,7 @@ const contentSchema = z.object({
   length: z.string().min(1, "Length is required"),
   useEmojis: z.boolean().default(false),
   useHashtags: z.boolean().default(false),
+  user_id: z.string(),
 });
 
 export class ContentController {
@@ -23,23 +24,55 @@ export class ContentController {
       const limit = parseInt(req.query.limit as string) || 10;
       const startIndex = (page - 1) * limit;
 
-      // Get total count of records
-      const { count, error: countError } = await supabase
-        .from("contents")
-        .select("*", { count: "exact", head: true });
+      //   const { search } = req.query;
+      console.log("query", req.query);
 
+      const filterId = req.query["filter.id"] as string | undefined;
+      const search = req.query["search"] as string | undefined;
+
+      console.log("req.user.id", req.user, req);
+
+      // Get authenticated user ID (modify this based on your auth setup)
+      const user_id = req.user?.id; // Ensure this is available from your auth middleware
+
+      console.log("user_id", user_id);
+      if (!user_id) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      // Build the query with filtering
+      let query = supabase
+        .from("contents")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user_id); // Filter estimates by authenticated user ID
+
+      if (filterId) {
+        query = query.eq("id", filterId);
+      }
+
+      // Get total count of records
+      const { count, error: countError } = await query;
       if (countError) throw countError;
 
-      // Fetch paginated content along with project name from estimates table
-      const { data, error } = await supabase
+      // Fetch paginated data with filter
+      let dataQuery = supabase
         .from("contents")
-        .select(
-          "*, estimates(projectName)" // Fetch all fields from `contents` + project name from `estimates`
-        )
+        .select("*")
+        .eq("user_id", user_id) // Ensure only the user’s estimates are fetched
         .range(startIndex, startIndex + limit - 1);
 
+      if (filterId) {
+        dataQuery = dataQuery.eq("id", filterId);
+      }
+
+      if (search) {
+        dataQuery = dataQuery.ilike("projectName", `%${search}%`);
+      }
+
+      const { data, error } = await dataQuery;
       if (error) throw error;
 
+      // Calculate pagination metadata
       const totalRecords = count || 0;
       const totalPages = Math.ceil(totalRecords / limit);
 
@@ -109,6 +142,7 @@ export class ContentController {
         use_hashtags: contentData.useHashtags,
         content: generatedContent,
         created_at: new Date().toISOString(),
+        user_id: contentData.user_id,
       };
 
       const { data, error } = await supabase

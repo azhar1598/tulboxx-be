@@ -42,6 +42,7 @@ const invoiceSchema = z.object({
   // Optional: Additional fields
   additionalNotes: z.string().optional(),
   projectId: z.string(), // Add this field
+  projectName: z.string(),
 });
 
 export class InvoicesController {
@@ -188,7 +189,7 @@ export class InvoicesController {
 
         // console.log("Sending email with invoice attached", data[0]);
         // await sendInvoiceEmail(data[0], "pdfBuffer");
-        await sendEmail();
+        await sendEmail(invoiceData);
         // await MailgunService();
         return res.status(201).json({
           message: "Invoice created successfully and email sent",
