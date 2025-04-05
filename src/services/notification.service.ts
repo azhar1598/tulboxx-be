@@ -94,7 +94,13 @@ export class NotificationService {
     );
 
     try {
-      const response = await this.messaging.sendAll(messages);
+      const response = await this.messaging.sendEachForMulticast({
+        tokens,
+        notification: {
+          title: notification.title,
+          body: notification.body,
+        },
+      });
 
       // Handle failed deliveries and clean up invalid tokens
       response.responses.forEach((resp, idx) => {
