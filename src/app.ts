@@ -1,41 +1,91 @@
+// import express from "express";
+// import cors from "cors";
+// import swaggerDocs from "./utils/swagger";
+// import { protectedRoutes, publicRoutes, authRoutes } from "./routes";
+// import scalarAPISpec from "./utils/scalar";
+
+// const app = express();
+
+// const allowedOrigins = [
+//   "http://localhost:3000", // Local dev
+//   "https://tulboxx.vercel.app", // Deployed frontend
+// ];
+
+// // app.use(cors({ origin: "http://localhost:3000", credentials: true }));
+// app.use(
+//   cors({
+//     origin: function (origin, callback) {
+//       if (!origin || allowedOrigins.includes(origin)) {
+//         callback(null, true);
+//       } else {
+//         callback(new Error("Not allowed by CORS"));
+//       }
+//     },
+//     credentials: true,
+//   })
+// );
+
+// app.use(express.json());
+
+// app.get("/", (req, res) => {
+//   res.send("Backend is running! 🎉");
+// });
+
+// app.use("/", protectedRoutes);
+// app.use("/public", publicRoutes);
+// app.use("/auth", authRoutes);
+
+// const PORT = process.env.PORT || 3001;
+
+// app.get("/docs", (req, res) => {
+//   res.send(`
+//     <!DOCTYPE html>
+//     <html>
+//       <head>
+//         <title>API Reference</title>
+//         <meta charset="utf-8"/>
+//         <meta name="viewport" content="width=device-width, initial-scale=1" />
+//       </head>
+//       <body>
+//         <script
+//           id="api-reference"
+//           data-url="/openapi.json"
+//           src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+//       </body>
+//     </html>
+//   `);
+// });
+
+// app.get("/openapi.json", (req, res) => {
+//   res.json(scalarAPISpec);
+// });
+
+// app.listen(PORT, () => {
+//   console.log(`Server running on port ${PORT}`);
+//   console.log(`Swagger Docs available at http://localhost:${PORT}/docs`);
+//   swaggerDocs(app, PORT);
+// });
+
 import express from "express";
 import cors from "cors";
 import swaggerDocs from "./utils/swagger";
 import { protectedRoutes, publicRoutes, authRoutes } from "./routes";
 import scalarAPISpec from "./utils/scalar";
 
+// Create app
 const app = express();
 
-const allowedOrigins = [
-  "http://localhost:3000", // Local dev
-  "https://tulboxx.vercel.app", // Deployed frontend
-];
-
-// app.use(cors({ origin: "http://localhost:3000", credentials: true }));
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-  })
-);
-
+// Middleware
+app.use(cors({ origin: "http://localhost:3000", credentials: true }));
 app.use(express.json());
 
+// Routes
 app.get("/", (req, res) => {
-  res.send("Backend is running! 🎉");
+  res.send("Backend is running ✅");
 });
-
 app.use("/", protectedRoutes);
 app.use("/public", publicRoutes);
 app.use("/auth", authRoutes);
-
-const PORT = process.env.PORT || 3001;
 
 app.get("/docs", (req, res) => {
   res.send(`
@@ -60,8 +110,8 @@ app.get("/openapi.json", (req, res) => {
   res.json(scalarAPISpec);
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Swagger Docs available at http://localhost:${PORT}/docs`);
-  swaggerDocs(app, PORT);
-});
+// 🧠 Important: No app.listen() on Vercel!
+// ❗ Instead, export the handler for Vercel
+
+// @ts-ignore
+module.exports = app;
