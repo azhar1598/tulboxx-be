@@ -26,6 +26,11 @@ app.use(
 );
 
 app.use(express.json());
+
+app.get("/", (req, res) => {
+  res.send("Backend is running! 🎉");
+});
+
 app.use("/", protectedRoutes);
 app.use("/public", publicRoutes);
 app.use("/auth", authRoutes);
