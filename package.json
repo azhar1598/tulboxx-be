@@ -1,10 +1,10 @@
 {
   "name": "explore-be",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "src/app.ts",
   "builds": [
     {
-      "src": "index.js",
+      "src": "src/app.ts",
       "use": "@vercel/node"
     }
   ],
@@ -17,7 +17,7 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "index.js"
+      "dest": "src/app.ts"
     }
   ],
   "author": "azhar",
