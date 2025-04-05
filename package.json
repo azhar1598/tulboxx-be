@@ -6,7 +6,8 @@
     "start": "node dist/app.js",
     "dev": "nodemon src/app.ts",
     "build": "tsc",
-    "watch": "tsc -w"
+    "watch": "tsc -w",
+    "vercel-build": "echo hello"
   },
   "author": "azhar",
   "license": "ISC",
