@@ -1,25 +1,13 @@
 {
   "name": "explore-be",
   "version": "1.0.0",
-  "main": "src/app.ts",
-  "builds": [
-    {
-      "src": "src/app.ts",
-      "use": "@vercel/node"
-    }
-  ],
+  "main": "index.js",
   "scripts": {
     "start": "node dist/app.js",
     "dev": "nodemon src/app.ts",
     "build": "tsc",
     "watch": "tsc -w"
   },
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "src/app.ts"
-    }
-  ],
   "author": "azhar",
   "license": "ISC",
   "description": "",
