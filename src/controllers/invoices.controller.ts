@@ -114,74 +114,62 @@ export class InvoicesController {
 
   async getInvoices(req: Request, res: Response) {
     try {
-      // Extract pagination parameters from query
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 20;
       const startIndex = (page - 1) * limit;
 
-      // Extract filter parameters
       const status = req.query.status as string | undefined;
       const search = req.query.search as string | undefined;
 
-      // Get authenticated user ID
       const user_id = req.user?.id;
       if (!user_id) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      // Build the query with all conditions
-      // let query = supabase
-      //   .from("invoices")
-      //   .select(
-      //     `
-      //     *,
-      //     estimates!project_id (
-      //       projectName
-      //     )
-      //   `,
-      //     { count: "exact" }
-      //   ) // Get both data and count in one query
-      //   .eq("user_id", user_id);
+      // Count query
+      let countQuery = supabase
+        .from("invoices")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user_id);
 
+      if (status) {
+        countQuery = countQuery.eq("status", status);
+      }
+
+      if (search) {
+        countQuery = countQuery.or(
+          `invoice_number.ilike.%${search}%,customer_name.ilike.%${search}%`
+        );
+      }
+
+      const { count, error: countError } = await countQuery;
+      if (countError) throw countError;
+
+      // Data query
       let dataQuery = supabase
         .from("invoices")
         .select("*")
-        .eq("user_id", user_id) // Ensure only the user’s estimates are fetched
+        .eq("user_id", user_id)
         .range(startIndex, startIndex + limit - 1);
 
-      // Apply status filter if provided
       if (status) {
         dataQuery = dataQuery.eq("status", status);
       }
 
-      // Apply search filter if provided
       if (search) {
         dataQuery = dataQuery.or(
           `invoice_number.ilike.%${search}%,customer_name.ilike.%${search}%`
         );
       }
 
-      // Apply pagination
-      dataQuery = dataQuery.range(startIndex, startIndex + limit - 1);
-
-      // Execute single query
-      const { data, count, error } = await dataQuery;
-
+      const { data, error } = await dataQuery;
       if (error) throw error;
 
-      // Transform the data to include project_name at the top level
-      const transformedData = data?.map((invoice) => ({
-        ...invoice,
-        project_name: invoice.estimates?.projectName || null,
-      }));
-
-      // Calculate pagination metadata
       const totalRecords = count || 0;
       const totalPages = Math.ceil(totalRecords / limit);
 
-      // Prepare the response
-      const response = {
-        data: transformedData,
+      return res.status(200).json({
+        data,
         metadata: {
           totalRecords,
           recordsPerPage: limit,
@@ -190,9 +178,7 @@ export class InvoicesController {
           hasNextPage: page < totalPages,
           hasPreviousPage: page > 1,
         },
-      };
-
-      return res.status(200).json(response);
+      });
     } catch (error) {
       console.error("Error fetching invoices:", error);
       return res.status(500).json({ error: "Failed to fetch invoices" });
