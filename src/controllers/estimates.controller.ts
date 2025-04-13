@@ -15,11 +15,7 @@ const lineItemSchema = z.object({
 const estimationSchema = z.object({
   // General form
   projectName: z.string().min(1, "Project name is required"),
-  customerName: z.string().min(1, "Customer name is required"),
-  email: z.string().email("Invalid email format"),
-  phone: z.number(),
-  address: z.string(),
-  type: z.enum(["residential", "commercial"]),
+  clientId: z.string().min(1, "Client is required"),
 
   // Project form
   serviceType: z.string(),
@@ -175,6 +171,66 @@ export class EstimatesController {
     }
   }
 
+  // async createEstimate(req: Request, res: Response) {
+  //   try {
+  //     const validationResult = estimationSchema.safeParse(req.body);
+
+  //     if (!validationResult.success) {
+  //       return res.status(400).json({
+  //         error: "Validation failed",
+  //         details: validationResult.error.format(),
+  //       });
+  //     }
+
+  //     const estimateData = validationResult.data;
+
+  //     let generatedEstimate;
+  //     try {
+  //       generatedEstimate = await generateEstimateWithGemini(estimateData);
+  //     } catch (apiError: any) {
+  //       console.error("Gemini API error:", apiError);
+  //       return res.status(500).json({
+  //         error: "Failed to generate content with AI",
+  //         details: apiError.message,
+  //       });
+  //     }
+
+  //     // Calculate total amount from line items
+  //     const totalAmount = estimateData.lineItems.reduce(
+  //       (sum, item) => sum + item.totalPrice,
+  //       0
+  //     );
+
+  //     // Add metadata
+  //     const dataToInsert = {
+  //       ...estimateData,
+  //       ai_generated_estimate: generatedEstimate,
+  //       total_amount: totalAmount,
+  //       user_id: estimateData.user_id,
+  //       created_at: new Date().toISOString(),
+  //     };
+
+  //     // Insert into database
+  //     const { data, error } = await supabase
+  //       .from("estimates")
+  //       .insert(dataToInsert)
+  //       .select();
+
+  //     if (error) throw error;
+
+  //     return res.status(201).json({
+  //       message: "Estimate created successfully",
+  //       estimate: data[0],
+  //     });
+  //   } catch (error: any) {
+  //     console.error("Error creating estimate:", error);
+  //     return res.status(500).json({
+  //       error: "Failed to create estimate",
+  //       details: error.message,
+  //     });
+  //   }
+  // }
+
   async createEstimate(req: Request, res: Response) {
     try {
       const validationResult = estimationSchema.safeParse(req.body);
@@ -187,6 +243,23 @@ export class EstimatesController {
       }
 
       const estimateData = validationResult.data;
+
+      // Verify that the client exists before proceeding
+      const { data: clientData, error: clientError } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("id", estimateData.clientId) // Using clientId as received from frontend
+        .single();
+
+      if (clientError || !clientData) {
+        return res.status(400).json({
+          error: "Invalid client ID",
+          details: "The specified client does not exist",
+        });
+      }
+
+      // Transform the data for database insertion - convert clientId to client_id
+      const { clientId, ...otherData } = estimateData;
 
       let generatedEstimate;
       try {
@@ -205,9 +278,10 @@ export class EstimatesController {
         0
       );
 
-      // Add metadata
+      // Add metadata with the correct field name for the database
       const dataToInsert = {
-        ...estimateData,
+        ...otherData,
+        client_id: clientId, // Convert from clientId to client_id
         ai_generated_estimate: generatedEstimate,
         total_amount: totalAmount,
         user_id: estimateData.user_id,
@@ -220,7 +294,10 @@ export class EstimatesController {
         .insert(dataToInsert)
         .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Database insertion error:", error);
+        throw error;
+      }
 
       return res.status(201).json({
         message: "Estimate created successfully",
