@@ -58,4 +58,14 @@ estimatesRouter.get("/:id", estimatesController.getEstimateById);
  *     description: Delete an estimate by id
  */
 estimatesRouter.delete("/:id", estimatesController.deleteEstimate);
+
+/**
+ * @openapi
+ * /estimates/{id}:
+ *   patch:
+ *     summary: Update an estimate by id
+ *     description: Update an estimate by id
+ */
+estimatesRouter.patch("/:id", estimatesController.updateEstimate);
+
 export default estimatesRouter;

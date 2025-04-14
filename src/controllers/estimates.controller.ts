@@ -30,6 +30,7 @@ const estimationSchema = z.object({
   equipmentMaterials: z.string(),
   additionalNotes: z.string(),
   user_id: z.string(),
+  ai_generated_estimate: z.string().optional(),
 });
 
 export class EstimatesController {
@@ -419,6 +420,89 @@ export class EstimatesController {
     } catch (error) {
       console.error("Error deleting estimate:", error);
       return res.status(500).json({ error: "Failed to delete estimate" });
+    }
+  }
+
+  async updateEstimate(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+
+      // Validate estimateId
+      if (!id) {
+        return res.status(400).json({
+          error: "Missing estimate ID",
+          details: "An estimate ID is required to update an estimate",
+        });
+      }
+
+      // Check if the estimate exists
+      const { data: existingEstimate, error: fetchError } = await supabase
+        .from("estimates")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (fetchError || !existingEstimate) {
+        return res.status(404).json({
+          error: "Estimate not found",
+          details: "The specified estimate does not exist",
+        });
+      }
+
+      // Validate the request body
+      const validationResult = estimationSchema.safeParse(req.body);
+
+      if (!validationResult.success) {
+        return res.status(400).json({
+          error: "Validation failed",
+          details: validationResult.error.format(),
+        });
+      }
+
+      const updateData = validationResult.data;
+
+      // Calculate total amount from line items if they exist in the update
+      let totalAmount = existingEstimate.total_amount; // Default to existing total
+      if (updateData.lineItems) {
+        totalAmount = updateData.lineItems.reduce(
+          (sum, item) => sum + item.totalPrice,
+          0
+        );
+      }
+
+      // Prepare data for update - handle clientId conversion if present
+      const { clientId, ...otherData } = updateData;
+
+      const dataToUpdate = {
+        ...otherData,
+        ai_generated_estimate: updateData?.ai_generated_estimate,
+        ...(clientId && { client_id: clientId }), // Only include if clientId exists in the update
+        ...(updateData.lineItems && { total_amount: totalAmount }), // Only update total if line items changed
+        updated_at: new Date().toISOString(),
+      };
+
+      // Update the estimate
+      const { data, error } = await supabase
+        .from("estimates")
+        .update(dataToUpdate)
+        .eq("id", id)
+        .select();
+
+      if (error) {
+        console.error("Database update error:", error);
+        throw error;
+      }
+
+      return res.status(200).json({
+        message: "Estimate updated successfully",
+        estimate: data[0],
+      });
+    } catch (error: any) {
+      console.error("Error updating estimate:", error);
+      return res.status(500).json({
+        error: "Failed to update estimate",
+        details: error.message,
+      });
     }
   }
 }
