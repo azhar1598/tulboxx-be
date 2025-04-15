@@ -44,6 +44,7 @@ const invoiceSchema = z.object({
   projectId: z.string().optional(), // Add this field
   projectName: z.string(),
   user_id: z.string(),
+  status: z.string(),
 });
 
 export class InvoicesController {
@@ -187,6 +188,40 @@ export class InvoicesController {
 
   async createInvoice(req: Request, res: Response) {
     try {
+      const generateInvoiceNumber = () => {
+        const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        let result = "";
+        for (let i = 0; i < 5; i++) {
+          result += characters.charAt(
+            Math.floor(Math.random() * characters.length)
+          );
+        }
+        return result;
+      };
+
+      if (req.body.status === "draft") {
+        // For drafts, just insert the data without validation
+        const invoiceNumber = generateInvoiceNumber();
+        const dataToInsert = {
+          ...req.body,
+          invoice_number: invoiceNumber,
+          created_at: new Date().toISOString(),
+        };
+
+        const { data, error } = await supabase
+          .from("invoices")
+          .insert(dataToInsert)
+          .select();
+
+        if (error) throw error;
+
+        return res.status(201).json({
+          message: "Draft invoice created successfully",
+          invoice: data[0],
+        });
+      }
+
+      // For non-draft invoices, proceed with existing validation logic
       const validationResult = invoiceSchema.safeParse(req.body);
 
       if (!validationResult.success) {
@@ -212,17 +247,6 @@ export class InvoicesController {
         });
       }
 
-      const generateInvoiceNumber = () => {
-        const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        let result = "";
-        for (let i = 0; i < 5; i++) {
-          result += characters.charAt(
-            Math.floor(Math.random() * characters.length)
-          );
-        }
-        return result;
-      };
-
       // Generate invoice number
       const invoiceNumber = generateInvoiceNumber();
 
@@ -242,6 +266,7 @@ export class InvoicesController {
           remit_payment: data.remitPayment,
           additional_notes: data.additionalNotes,
           project_id: data.projectId || null, // Corrected field name
+          status: data.status || "unpaid",
         };
       };
 
@@ -250,7 +275,6 @@ export class InvoicesController {
         ...transformToDatabaseFormat(invoiceData),
         invoice_number: invoiceNumber,
         created_at: new Date().toISOString(),
-        status: "unpaid",
         user_id: invoiceData.user_id,
       };
 
