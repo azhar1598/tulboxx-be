@@ -41,7 +41,7 @@ const invoiceSchema = z.object({
 
   // Optional: Additional fields
   additionalNotes: z.string().optional(),
-  projectId: z.string(), // Add this field
+  projectId: z.string().optional(), // Add this field
   projectName: z.string(),
   user_id: z.string(),
 });
@@ -241,7 +241,7 @@ export class InvoicesController {
           invoice_summary: data.invoiceSummary,
           remit_payment: data.remitPayment,
           additional_notes: data.additionalNotes,
-          project_id: data.projectId, // Corrected field name
+          project_id: data.projectId || null, // Corrected field name
         };
       };
 
