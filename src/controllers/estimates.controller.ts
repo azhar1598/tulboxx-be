@@ -134,7 +134,7 @@ export class EstimatesController {
       let dataQuery = supabase
         .from("estimates")
         .select("*")
-        .eq("user_id", user_id) // Ensure only the user’s estimates are fetched
+        .eq("user_id", user_id) // Ensure only the user's estimates are fetched
         .range(startIndex, startIndex + limit - 1);
 
       if (filterId) {
@@ -319,7 +319,12 @@ export class EstimatesController {
 
       const { data, error } = await supabase
         .from("estimates")
-        .select("*")
+        .select(
+          `
+          *,
+          clients:client_id (*)
+        `
+        )
         .eq("id", id)
         .single();
 
