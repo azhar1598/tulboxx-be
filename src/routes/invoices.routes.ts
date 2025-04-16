@@ -50,4 +50,13 @@ invoicesRouter.post("/", invoicesController.createInvoice);
  */
 invoicesRouter.get("/:id", invoicesController.getInvoiceById);
 
+/**
+ * @openapi
+ * /invoices/{id}:
+ *   patch:
+ *     summary: Update invoice status
+ *     description: Update the status of an invoice
+ */
+invoicesRouter.patch("/:id", invoicesController.updateInvoiceStatus);
+
 export default invoicesRouter;

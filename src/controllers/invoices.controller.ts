@@ -148,6 +148,7 @@ export class InvoicesController {
         .from("invoices")
         .select("*")
         .eq("user_id", user_id)
+        .order("created_at", { ascending: false })
         .range(startIndex, startIndex + limit - 1);
 
       if (status) {
@@ -358,11 +359,23 @@ export class InvoicesController {
   async getInvoiceById(req: Request, res: Response) {
     try {
       const { id } = req.params;
+      const user_id = req.user?.id;
+
+      if (!user_id) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
 
       const { data, error } = await supabase
         .from("invoices")
-        .select("*")
+        .select(
+          `
+          *,
+          client:clients!fk_invoice_client (*),
+          project:estimates!project_id (*)
+        `
+        )
         .eq("id", id)
+        .eq("user_id", user_id)
         .single();
 
       if (error) {
@@ -383,26 +396,79 @@ export class InvoicesController {
     try {
       const { id } = req.params;
       const { status } = req.body;
+      const user_id = req.user?.id;
+
+      if (!user_id) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
 
       // Validate status
-      if (!["unpaid", "paid", "overdue", "cancelled"].includes(status)) {
+      if (
+        !["unpaid", "paid", "overdue", "draft", "cancelled"].includes(status)
+      ) {
         return res.status(400).json({
           error: "Invalid status",
           message: "Status must be one of: unpaid, paid, overdue, cancelled",
         });
       }
 
+      // First get the current invoice data
+      const { data: currentInvoice, error: fetchError } = await supabase
+        .from("invoices")
+        .select(
+          `
+          *,
+          client:clients!fk_invoice_client (*),
+          project:estimates!project_id (*)
+        `
+        )
+        .eq("id", id)
+        .eq("user_id", user_id)
+        .single();
+
+      if (fetchError) {
+        if (fetchError.code === "PGRST116") {
+          return res.status(404).json({ error: "Invoice not found" });
+        }
+        throw fetchError;
+      }
+
+      // Update the invoice status
       const { data, error } = await supabase
         .from("invoices")
-        .update({ status, updated_at: new Date().toISOString() })
+        .update({
+          status,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", id)
         .select();
 
-      if (error) {
-        if (error.code === "PGRST116") {
-          return res.status(404).json({ error: "Invoice not found" });
+      if (error) throw error;
+
+      // If status is updated to unpaid, send email
+      if (status === "unpaid") {
+        try {
+          // Transform the data to match email service format
+          const emailData = {
+            ...data[0],
+            clientId: data[0].client_id,
+            issueDate: data[0].issue_date,
+            dueDate: data[0].due_date,
+          };
+
+          await sendEmail(emailData);
+          return res.status(200).json({
+            message: "Invoice status updated successfully and email sent",
+            invoice: data[0],
+          });
+        } catch (emailError) {
+          console.error("Error sending invoice email:", emailError);
+          return res.status(200).json({
+            message:
+              "Invoice status updated successfully but failed to send email",
+            invoice: data[0],
+          });
         }
-        throw error;
       }
 
       return res.status(200).json({
