@@ -119,50 +119,72 @@ export class InvoicesController {
       const status = req.query.status as string | undefined;
       const search = req.query.search as string | undefined;
 
+      console.log("status", status);
+      console.log("search-->", search);
+
       const user_id = req.user?.id;
       if (!user_id) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      // Count query
       let countQuery = supabase
         .from("invoices")
         .select("*", { count: "exact", head: true })
         .eq("user_id", user_id);
 
-      if (status) {
+      // Only apply status filter if status is not 'all'
+      if (status && status !== "all") {
         countQuery = countQuery.eq("status", status);
       }
 
       if (search) {
+        // Only search in invoice_number
+        // countQuery = countQuery
+        //   .ilike("invoice_number", `%${search}%`)
+        //   .ilike("invoice_total_amount", `%${Number(search)}%`);
         countQuery = countQuery.or(
-          `invoice_number.ilike.%${search}%,customer_name.ilike.%${search}%`
+          `invoice_number.ilike.%${search}%, invoice_total_amount.eq.${
+            isNaN(Number(search)) ? 0 : Number(search)
+          }`
         );
       }
 
       const { count, error: countError } = await countQuery;
-      if (countError) throw countError;
+      if (countError) {
+        console.error("Count query error:", countError);
+        throw countError;
+      }
 
-      // Data query
       let dataQuery = supabase
         .from("invoices")
-        .select("*")
+        .select(
+          `
+          *,
+          client:clients!fk_invoice_client (*),
+          project:estimates!project_id (*)
+        `
+        )
         .eq("user_id", user_id)
-        .order("created_at", { ascending: false })
-        .range(startIndex, startIndex + limit - 1);
+        .order("created_at", { ascending: false });
 
-      if (status) {
+      // Only apply status filter if status is not 'all'
+      if (status && status !== "all") {
         dataQuery = dataQuery.eq("status", status);
       }
 
       if (search) {
-        dataQuery = dataQuery.or(
-          `invoice_number.ilike.%${search}%,customer_name.ilike.%${search}%`
-        );
+        // Only search in invoice_number
+        dataQuery = dataQuery.ilike("invoice_number", `%${search}%`);
       }
 
+      // Apply pagination after all filters
+      dataQuery = dataQuery.range(startIndex, startIndex + limit - 1);
+
       const { data, error } = await dataQuery;
-      if (error) throw error;
+      if (error) {
+        console.error("Data query error:", error);
+        throw error;
+      }
 
       const totalRecords = count || 0;
       const totalPages = Math.ceil(totalRecords / limit);
