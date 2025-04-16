@@ -4,8 +4,12 @@ import { UserController } from "../controllers/user.controller";
 const userProfileRouter = Router();
 const userController = new UserController();
 
-userProfileRouter.get("/:id", async (req, res) => {
+userProfileRouter.get("/", async (req, res) => {
   await userController.getUserProfile(req, res);
+});
+
+userProfileRouter.patch("/", async (req, res) => {
+  await userController.updateUserProfile(req, res);
 });
 
 /**

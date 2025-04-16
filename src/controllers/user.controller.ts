@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { supabase } from "../supabaseClient";
 import { z } from "zod";
+import { UserMetadata } from "firebase-admin/lib/auth/user-record";
 
 // Define the schema for user profile validation matching the frontend schema
 const userProfileSchema = z.object({
@@ -21,44 +22,35 @@ const userProfileSchema = z.object({
 export class UserController {
   async getUserProfile(req: Request, res: Response) {
     try {
-      // Assuming user ID is available from authentication middleware (e.g., JWT token or session)
-      const userId = req.user?.id; // Get the logged-in user's ID from the authenticated session
-
-      console.log("userId", userId);
+      const userId = req.user?.id;
 
       if (!userId) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      // Fetch user details from Supabase based on the logged-in user's ID
+      // Query the view with proper RLS
       const { data, error } = await supabase
-        .from("users")
+        .from("user_profiles")
         .select("*")
         .eq("id", userId)
         .single();
-
-      console.log("userIddata---", data);
 
       if (error) {
         return res.status(500).json({ error: "Failed to fetch user profile" });
       }
 
-      // Format and return the user data as a response
+      // Format and return the user data
       const formattedData = {
         id: data.id,
-        fullName: data.full_name,
         email: data.email,
-        phone: data.phone,
-        address: data.address,
-        companyName: data.company_name,
+        emailConfirmed: data.email_confirmed,
+        userMetadata: data.raw_user_meta_data,
         jobTitle: data.job_title,
+        companyName: data.company_name,
         industry: data.industry,
         companySize: data.company_size,
-        emailNotifications: data.email_notifications,
-        smsNotifications: data.sms_notifications,
-        role: data.role,
-        createdAt: data.created_at,
-        updatedAt: data.updated_at,
+        phone: data.phone,
+        address: data.address,
       };
 
       return res.status(200).json(formattedData);
@@ -70,13 +62,23 @@ export class UserController {
 
   async updateUserProfile(req: Request, res: Response) {
     try {
-      const userId = req.user?.id; // Assuming user ID is available from auth middleware
+      const userId = req.user?.id;
 
       if (!userId) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const validationResult = userProfileSchema.safeParse(req.body);
+      // Define validation schema for company details only
+      const updateProfileSchema = z.object({
+        companyName: z.string().optional(),
+        companySize: z.string().optional(),
+        address: z.string().optional(),
+        plan: z.string().optional(),
+        industry: z.string().optional(),
+        jobTitle: z.string().optional(),
+      });
+
+      const validationResult = updateProfileSchema.safeParse(req.body);
 
       if (!validationResult.success) {
         return res.status(400).json({
@@ -87,96 +89,58 @@ export class UserController {
 
       const profileData = validationResult.data;
 
-      // Handle password update if provided
-      if (profileData.currentPassword && profileData.newPassword) {
-        try {
-          // This would need to be implemented based on your auth system
-          // For Supabase, you might use auth.api.updateUser
-          const { error: passwordError } = await supabase.auth.updateUser({
-            password: profileData.newPassword,
-          });
-
-          if (passwordError) throw passwordError;
-        } catch (passwordError: any) {
-          return res.status(400).json({
-            error: "Failed to update password",
-            details: passwordError.message,
-          });
-        }
-      }
-
-      // Remove password fields from data before storing in profile
-      const { currentPassword, newPassword, ...dataToStore } = profileData;
-
       // Format data to match database schema
-      const formattedData = {
-        full_name: dataToStore.fullName,
-        email: dataToStore.email,
-        phone: dataToStore.phone,
-        address: dataToStore.address,
-        company_name: dataToStore.companyName,
-        job_title: dataToStore.jobTitle,
-        industry: dataToStore.industry,
-        company_size: dataToStore.companySize,
-        email_notifications: dataToStore.emailNotifications,
-        sms_notifications: dataToStore.smsNotifications,
-        updated_at: new Date().toISOString(),
+      const formattedData: any = {
+        company_name: profileData.companyName,
+        company_size: profileData.companySize,
+        address: profileData.address,
+        plan: profileData.plan,
+        industry: profileData.industry,
+        job_title: profileData.jobTitle,
       };
 
-      // Check which column to use for the update (id or id)
-      const { data: userCheck, error: checkError } = await supabase
-        .from("users")
-        .select("id, id")
-        .or(`id.eq.${userId},id.eq.${userId}`)
-        .single();
+      // Remove undefined values
+      Object.keys(formattedData).forEach(
+        (key) => formattedData[key] === undefined && delete formattedData[key]
+      );
 
-      if (checkError) {
-        throw checkError;
-      }
-
-      // Determine which column to use for the condition
-      const updateColumn = userCheck.id === userId ? "id" : "id";
-
-      // Update user profile
+      // Update profile data
       const { data, error } = await supabase
-        .from("users")
+        .from("profiles")
         .update(formattedData)
-        .eq(updateColumn, userId)
+        .eq("id", userId)
         .select();
 
-      if (error) throw error;
+      if (error) {
+        return res.status(500).json({
+          error: "Failed to update profile",
+          details: error.message,
+        });
+      }
 
       if (!data || data.length === 0) {
         return res.status(404).json({ error: "User not found" });
       }
 
-      // Format response to match frontend schema
+      // Format response
       const responseData = {
         id: data[0].id,
-        userId: data[0].id || data[0].id,
-        fullName: data[0].full_name,
-        email: data[0].email,
-        phone: data[0].phone,
-        address: data[0].address,
         companyName: data[0].company_name,
-        jobTitle: data[0].job_title,
-        industry: data[0].industry,
         companySize: data[0].company_size,
-        emailNotifications: data[0].email_notifications,
-        smsNotifications: data[0].sms_notifications,
-        role: data[0].role,
-        createdAt: data[0].created_at,
-        updatedAt: data[0].updated_at,
+        address: data[0].address,
+        plan: data[0].plan,
+        industry: data[0].industry,
+        jobTitle: data[0].job_title,
       };
 
       return res.status(200).json({
-        message: "User profile updated successfully",
+        message: "Profile updated successfully",
         profile: responseData,
       });
     } catch (error: any) {
       console.error("Error updating user profile:", error);
       return res.status(500).json({
-        error: "Failed to update user profile",
+        error: "Failed to update profile",
         details: error.message,
       });
     }
@@ -212,7 +176,7 @@ export class UserController {
 
       // Fetch paginated users
       const { data, error } = await supabase
-        .from("users")
+        .from("profiles")
         .select("*")
         .range(startIndex, startIndex + limit - 1);
 
@@ -269,7 +233,7 @@ export class UserController {
       const requestingUserId = req.user?.id;
       if (id !== requestingUserId) {
         const { data: adminCheck, error: adminError } = await supabase
-          .from("users")
+          .from("profiles")
           .select("role")
           .or(`id.eq.${requestingUserId},id.eq.${requestingUserId}`)
           .single();
@@ -283,7 +247,7 @@ export class UserController {
 
       // Try to find user by either id or id
       const { data, error } = await supabase
-        .from("users")
+        .from("profiles")
         .select("*")
         .or(`id.eq.${id},id.eq.${id}`)
         .single();

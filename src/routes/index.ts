@@ -14,6 +14,7 @@ import contentRouter from "./content.routes";
 import authRouter from "./auth.routes";
 import userProfileRouter from "./user.routes";
 import clientRouter from "./client.routes";
+import paymentRouter from "./payment.routes";
 
 const routes = Router();
 
@@ -28,6 +29,7 @@ routes.use("/invoices", authMiddleware, invoicesRouter);
 routes.use("/content", authMiddleware, contentRouter);
 routes.use("/user-profile", authMiddleware, userProfileRouter);
 routes.use("/clients", authMiddleware, clientRouter);
+routes.use("/payment-info", authMiddleware, paymentRouter);
 
 const publicRoutes = Router();
 const authRoutes = Router();
