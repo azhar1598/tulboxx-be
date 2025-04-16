@@ -1,3 +1,4 @@
+import { supabase } from "../supabaseClient";
 import dayjs from "dayjs";
 import nodejsmailer from "nodemailer";
 
@@ -13,22 +14,33 @@ var transporter = nodejsmailer.createTransport({
 });
 
 export async function sendEmail(invoiceData: any) {
+  console.log("invoiceData", invoiceData);
+  const client = await supabase
+    .from("clients")
+    .select("*")
+    .eq("id", invoiceData.client_id)
+    .single();
+  const project = await supabase
+    .from("estimates")
+    .select("*")
+    .eq("id", invoiceData.project_id)
+    .single();
   const mailOptions = {
     from: "mohammedazhar.1598@gmail.com",
-    to: invoiceData.email,
+    to: client.data?.email,
     subject: "Invoice from Tuboxx",
     html: `
     <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 5px;">
       <div style="text-align: center; padding-bottom: 20px; border-bottom: 1px solid #eee;">
         <h2 style="color: #007bff; margin-bottom: 5px;">Invoice from Tulboxx</h2>
         <p style="color: #6c757d; font-size: 14px;">#${
-          invoiceData.projectName || ""
+          project.data?.projectName || ""
         }</p>
       </div>
       
   <div style="display:flex;justify-content:space-between;padding: 20px 0;">
      <div style="width: 40%;">   
-     <p>Dear ${invoiceData.customerName || "Customer"},</p>
+     <p>Dear ${client.data?.name || "Customer"},</p>
         <p>Thank you for your business. Please find your invoice details below.</p>
         </div>
        
@@ -37,13 +49,13 @@ export async function sendEmail(invoiceData: any) {
       <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
         <div style="width: 48%;">
           <h4 style="color: #007bff; margin-bottom: 10px;">BILLED TO:</h4>
-          <p style="margin: 0;">${invoiceData.customerName || ""}</p>
-          <p style="margin: 0;">${invoiceData.address || ""}</p>
+          <p style="margin: 0;">${client.data?.name || ""}</p>
+          <p style="margin: 0;">${client.data?.address || ""}</p>
           <p style="margin: 0;"><strong>Phone:</strong> ${
-            invoiceData.phone || ""
+            client.data?.phone || ""
           }</p>
           <p style="margin: 0;"><strong>Email:</strong> ${
-            invoiceData.email || ""
+            client.data?.email || ""
           }</p>
         </div>
         <div style="width: 48%;">
@@ -55,7 +67,7 @@ export async function sendEmail(invoiceData: any) {
             dayjs(invoiceData.dueDate).format("DD-MM-YYYY") || ""
           }</p>
           <p style="margin: 0;"><strong>Project Name:</strong> ${
-            invoiceData.projectName || ""
+            project.data?.projectName || ""
           }</p>
         </div>
       </div>
@@ -101,7 +113,7 @@ export async function sendEmail(invoiceData: any) {
         <tr>
           <td colspan="3" style="border: 1px solid #ddd; padding: 8px; text-align: right; font-weight: bold;">Grand Total:</td>
           <td style="border: 1px solid #ddd; padding: 8px; text-align: right; font-weight: bold;">$${
-            invoiceData.invoiceTotalAmount || "Null"
+            invoiceData.invoice_total_amount || "Null"
           }</td>
         </tr>
       </table>
@@ -111,7 +123,7 @@ export async function sendEmail(invoiceData: any) {
           ? `
         <div style="margin-bottom: 20px;">
           <h4 style="color: #007bff;">INVOICE SUMMARY</h4>
-          <p>${invoiceData.invoiceSummary}</p>
+          <p>${invoiceData.invoice_summary}</p>
         </div>
       `
           : ""

@@ -24,10 +24,7 @@ const remitPaymentSchema = z.object({
 
 const invoiceSchema = z.object({
   // General information
-  customerName: z.string().min(1, "Customer name is required"),
-  email: z.string().email("Invalid email format"),
-  phone: z.string().optional(),
-  address: z.string().optional(),
+  clientId: z.string().min(1, "Client ID is required"),
 
   // Invoice details
   issueDate: z.string(), // Store as ISO string
@@ -41,8 +38,8 @@ const invoiceSchema = z.object({
 
   // Optional: Additional fields
   additionalNotes: z.string().optional(),
-  projectId: z.string().optional(), // Add this field
-  projectName: z.string(),
+  projectId: z.string().optional(),
+
   user_id: z.string(),
   status: z.string(),
 });
@@ -188,29 +185,64 @@ export class InvoicesController {
 
   async createInvoice(req: Request, res: Response) {
     try {
-      const generateInvoiceNumber = () => {
+      // First verify the user is authenticated
+      const user_id = req.user?.id;
+      if (!user_id) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const generateInvoiceNumber = async (): Promise<string> => {
         const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        let result = "";
-        for (let i = 0; i < 5; i++) {
-          result += characters.charAt(
-            Math.floor(Math.random() * characters.length)
-          );
+        let invoiceNumber: string;
+        let isUnique = false;
+
+        while (!isUnique) {
+          let result = "";
+          for (let i = 0; i < 8; i++) {
+            result += characters.charAt(
+              Math.floor(Math.random() * characters.length)
+            );
+          }
+          // Check if number exists
+          const { data } = await supabase
+            .from("invoices")
+            .select("id")
+            .eq("invoice_number", result)
+            .single();
+
+          if (!data) {
+            invoiceNumber = result;
+            isUnique = true;
+          }
         }
-        return result;
+        return invoiceNumber!;
       };
 
       if (req.body.status === "draft") {
-        // For drafts, just insert the data without validation
-        const invoiceNumber = generateInvoiceNumber();
-        const dataToInsert = {
-          ...req.body,
-          invoice_number: invoiceNumber,
+        // Transform the draft data to match database column names
+        const transformedDraftData = {
+          client_id: req.body.clientId,
+          issue_date: req.body.issueDate,
+          due_date: req.body.dueDate,
+          invoice_total_amount: req.body.invoiceTotalAmount,
+          line_items: req.body.lineItems,
+          invoice_summary: req.body.invoiceSummary,
+          remit_payment: req.body.remitPayment,
+          additional_notes: req.body.additionalNotes,
+          project_id: req.body.projectId,
+          user_id: user_id,
+          status: "draft",
+        };
+
+        const draftData = {
+          ...transformedDraftData,
+          invoice_number: await generateInvoiceNumber(),
           created_at: new Date().toISOString(),
         };
 
         const { data, error } = await supabase
           .from("invoices")
-          .insert(dataToInsert)
+          .insert(draftData)
           .select();
 
         if (error) throw error;
@@ -221,8 +253,11 @@ export class InvoicesController {
         });
       }
 
-      // For non-draft invoices, proceed with existing validation logic
-      const validationResult = invoiceSchema.safeParse(req.body);
+      // For non-draft invoices, proceed with full validation
+      const validationResult = invoiceSchema.safeParse({
+        ...req.body,
+        user_id, // Include the user_id in validation
+      });
 
       if (!validationResult.success) {
         return res.status(400).json({
@@ -232,6 +267,20 @@ export class InvoicesController {
       }
 
       const invoiceData = validationResult.data;
+
+      // Verify that the client exists before proceeding
+      const { data: clientData, error: clientError } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("id", invoiceData.clientId)
+        .single();
+
+      if (clientError || !clientData) {
+        return res.status(400).json({
+          error: "Invalid client ID",
+          details: "The specified client does not exist",
+        });
+      }
 
       // Verify the total amount matches the sum of line items
       const calculatedTotal = invoiceData.lineItems.reduce(
@@ -247,35 +296,24 @@ export class InvoicesController {
         });
       }
 
-      // Generate invoice number
-      const invoiceNumber = generateInvoiceNumber();
+      const transformToDatabaseFormat = (data: typeof invoiceData) => ({
+        client_id: data.clientId,
+        issue_date: data.issueDate,
+        due_date: data.dueDate,
+        invoice_total_amount: data.invoiceTotalAmount,
+        line_items: data.lineItems,
+        invoice_summary: data.invoiceSummary,
+        remit_payment: data.remitPayment,
+        additional_notes: data.additionalNotes,
+        project_id: data.projectId,
+        user_id: data.user_id,
+        status: data.status,
+      });
 
-      // Add metadata
-      // Add this transformation before inserting
-      const transformToDatabaseFormat = (data: any) => {
-        return {
-          customer_name: data.customerName,
-          email: data.email,
-          phone: data.phone,
-          address: data.address,
-          issue_date: data.issueDate,
-          due_date: data.dueDate,
-          invoice_total_amount: data.invoiceTotalAmount,
-          line_items: data.lineItems,
-          invoice_summary: data.invoiceSummary,
-          remit_payment: data.remitPayment,
-          additional_notes: data.additionalNotes,
-          project_id: data.projectId || null, // Corrected field name
-          status: data.status || "unpaid",
-        };
-      };
-
-      // Then use it in your createInvoice method
       const dataToInsert = {
         ...transformToDatabaseFormat(invoiceData),
-        invoice_number: invoiceNumber,
+        invoice_number: await generateInvoiceNumber(),
         created_at: new Date().toISOString(),
-        user_id: invoiceData.user_id,
       };
 
       // Insert into database
@@ -287,23 +325,22 @@ export class InvoicesController {
       if (error) throw error;
 
       try {
-        // Generate PDF invoice
-        // const pdfBuffer = await generateInvoicePDF(data[0]);
+        // Transform the data back to the format expected by email service
+        const emailData = {
+          ...data[0],
+          clientId: data[0].client_id,
+          issueDate: data[0].issue_date,
+          dueDate: data[0].due_date,
+          // ... other transformations as needed
+        };
 
-        // Send email with invoice attached
-
-        // console.log("Sending email with invoice attached", data[0]);
-        // await sendInvoiceEmail(data[0], "pdfBuffer");
-        await sendEmail(invoiceData);
-        // await MailgunService();
+        await sendEmail(emailData);
         return res.status(201).json({
           message: "Invoice created successfully and email sent",
           invoice: data[0],
         });
       } catch (emailError) {
-        // If email fails, still return success for invoice creation
         console.error("Error sending invoice email:", emailError);
-
         return res.status(201).json({
           message: "Invoice created successfully but failed to send email",
           invoice: data[0],
