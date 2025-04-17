@@ -5,7 +5,7 @@ import { generateContentWithGemini } from "../utils/aiService";
 
 // Define the schema for validation
 const contentSchema = z.object({
-  projectId: z.string().optional(),
+  projectId: z.string().optional().nullable(),
   postType: z.string().min(1, "Post type is required"),
   advice: z.string().optional(),
   benefit: z.string().optional(),
