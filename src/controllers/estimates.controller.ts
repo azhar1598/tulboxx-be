@@ -133,8 +133,13 @@ export class EstimatesController {
       // Fetch paginated data with filter
       let dataQuery = supabase
         .from("estimates")
-        .select("*")
-        .eq("user_id", user_id) // Ensure only the user's estimates are fetched
+        .select(
+          `
+          *,
+          clients:client_id (*)
+        `
+        )
+        .eq("user_id", user_id)
         .range(startIndex, startIndex + limit - 1);
 
       if (filterId) {

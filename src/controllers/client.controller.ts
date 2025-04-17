@@ -7,7 +7,6 @@ const clientSchema = z.object({
   name: z.string().min(1, "Name is required"),
   email: z.string().email("Invalid email address"),
   phone: z.number().min(10, "Phone number is required"),
-  type: z.string().min(1, "Please select a type"),
   address: z.string().min(1, "Address is required"),
   user_id: z.string(),
 });
@@ -148,7 +147,6 @@ export class ClientController {
         name: clientData.name,
         email: clientData.email,
         phone: clientData.phone,
-        type: clientData.type,
         address: clientData.address,
         user_id: user_id,
         created_at: new Date().toISOString(),
@@ -267,7 +265,6 @@ export class ClientController {
           name: clientData.name,
           email: clientData.email,
           phone: clientData.phone,
-          type: clientData.type,
           address: clientData.address,
           updated_at: new Date().toISOString(),
         })
@@ -331,63 +328,6 @@ export class ClientController {
         error: "Failed to delete client",
         details: error.message,
       });
-    }
-  }
-
-  async getClientsByType(req: Request, res: Response) {
-    try {
-      const { type } = req.params;
-      const user_id = req.user?.id;
-
-      if (!user_id) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-
-      // Extract pagination parameters from query
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 10;
-      const startIndex = (page - 1) * limit;
-
-      // Get total count of records for this type
-      const { count, error: countError } = await supabase
-        .from("clients")
-        .select("*", { count: "exact", head: true })
-        .eq("type", type)
-        .eq("user_id", user_id);
-
-      if (countError) throw countError;
-
-      // Fetch the paginated data
-      const { data, error } = await supabase
-        .from("clients")
-        .select("*")
-        .eq("type", type)
-        .eq("user_id", user_id)
-        .range(startIndex, startIndex + limit - 1);
-
-      if (error) throw error;
-
-      // Calculate pagination metadata
-      const totalRecords = count || 0;
-      const totalPages = Math.ceil(totalRecords / limit);
-
-      // Prepare the response with data and metadata
-      const response = {
-        data,
-        metadata: {
-          totalRecords,
-          recordsPerPage: limit,
-          currentPage: page,
-          totalPages,
-          hasNextPage: page < totalPages,
-          hasPreviousPage: page > 1,
-        },
-      };
-
-      return res.status(200).json(response);
-    } catch (error) {
-      console.error("Error fetching clients by type:", error);
-      return res.status(500).json({ error: "Failed to fetch clients" });
     }
   }
 }
