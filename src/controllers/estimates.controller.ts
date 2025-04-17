@@ -16,6 +16,7 @@ const estimationSchema = z.object({
   // General form
   projectName: z.string().min(1, "Project name is required"),
   clientId: z.string().min(1, "Client is required"),
+  type: z.string().min(1, "Type is required"),
 
   // Project form
   serviceType: z.string(),
