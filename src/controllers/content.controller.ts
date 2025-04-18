@@ -44,7 +44,8 @@ export class ContentController {
       let query = supabase
         .from("contents")
         .select("*", { count: "exact", head: true })
-        .eq("user_id", user_id); // Filter estimates by authenticated user ID
+        .eq("user_id", user_id)
+        .order("created_at", { ascending: false }); // Add this line to sort by newest first
 
       if (filterId) {
         query = query.eq("id", filterId);
@@ -59,7 +60,8 @@ export class ContentController {
         .from("contents")
         .select("*")
         .eq("user_id", user_id) // Ensure only the user’s estimates are fetched
-        .range(startIndex, startIndex + limit - 1);
+        .range(startIndex, startIndex + limit - 1)
+        .order("created_at", { ascending: false }); // Add this line to sort by newest first
 
       if (filterId) {
         dataQuery = dataQuery.eq("id", filterId);
