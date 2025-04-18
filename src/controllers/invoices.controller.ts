@@ -417,7 +417,7 @@ export class InvoicesController {
   async updateInvoiceStatus(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const { status } = req.body;
+      const { status, ...invoiceData } = req.body; // Get all data from request body
       const user_id = req.user?.id;
 
       if (!user_id) {
@@ -434,34 +434,26 @@ export class InvoicesController {
         });
       }
 
-      // First get the current invoice data
-      const { data: currentInvoice, error: fetchError } = await supabase
-        .from("invoices")
-        .select(
-          `
-          *,
-          client:clients!fk_invoice_client (*),
-          project:estimates!project_id (*)
-        `
-        )
-        .eq("id", id)
-        .eq("user_id", user_id)
-        .single();
+      // Transform frontend camelCase to database snake_case
+      const transformedData = {
+        client_id: invoiceData.clientId,
+        issue_date: invoiceData.issueDate,
+        due_date: invoiceData.dueDate,
+        invoice_total_amount: invoiceData.invoiceTotalAmount,
+        line_items: invoiceData.lineItems,
+        invoice_summary: invoiceData.invoiceSummary,
+        remit_payment: invoiceData.remitPayment,
+        additional_notes: invoiceData.additionalNotes,
+        project_id: invoiceData.projectId,
+        user_id: user_id,
+        status: status,
+        updated_at: new Date().toISOString(),
+      };
 
-      if (fetchError) {
-        if (fetchError.code === "PGRST116") {
-          return res.status(404).json({ error: "Invoice not found" });
-        }
-        throw fetchError;
-      }
-
-      // Update the invoice status
+      // Update the invoice
       const { data, error } = await supabase
         .from("invoices")
-        .update({
-          status,
-          updated_at: new Date().toISOString(),
-        })
+        .update(transformedData)
         .eq("id", id)
         .select();
 
