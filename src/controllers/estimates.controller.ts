@@ -17,6 +17,7 @@ const estimationSchema = z.object({
   projectName: z.string().min(1, "Project name is required"),
   clientId: z.string().min(1, "Client is required"),
   type: z.string().min(1, "Type is required"),
+  name: z.string().optional(),
 
   // Project form
   serviceType: z.string(),
@@ -248,6 +249,7 @@ export class EstimatesController {
           details: validationResult.error.format(),
         });
       }
+      console.log("validationResult---->", validationResult);
 
       const estimateData = validationResult.data;
 

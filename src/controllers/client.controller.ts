@@ -16,8 +16,6 @@ export class ClientController {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
-      const startIndex = (page - 1) * limit;
-
       const filterId = req.query["filter.id"] as string | undefined;
       const search = req.query["search"] as string | undefined;
 
@@ -42,12 +40,16 @@ export class ClientController {
       const { count, error: countError } = await query;
       if (countError) throw countError;
 
-      // Fetch paginated data with filter
+      // Fetch data with or without pagination
       let dataQuery = supabase
         .from("clients")
         .select("*")
-        .eq("user_id", user_id)
-        .range(startIndex, startIndex + limit - 1);
+        .eq("user_id", user_id);
+
+      if (limit !== -1) {
+        const startIndex = (page - 1) * limit;
+        dataQuery = dataQuery.range(startIndex, startIndex + limit - 1);
+      }
 
       if (filterId) {
         dataQuery = dataQuery.eq("id", filterId);
@@ -60,21 +62,22 @@ export class ClientController {
       const { data, error } = await dataQuery;
       if (error) throw error;
 
-      // Calculate pagination metadata
-      const totalRecords = count || 0;
-      const totalPages = Math.ceil(totalRecords / limit);
+      // Calculate pagination metadata only if pagination is enabled
+      const response: any = { data };
 
-      const response = {
-        data,
-        metadata: {
+      if (limit !== -1) {
+        const totalRecords = count || 0;
+        const totalPages = Math.ceil(totalRecords / limit);
+
+        response.metadata = {
           totalRecords,
           recordsPerPage: limit,
           currentPage: page,
           totalPages,
           hasNextPage: page < totalPages,
           hasPreviousPage: page > 1,
-        },
-      };
+        };
+      }
 
       return res.status(200).json(response);
     } catch (error) {
