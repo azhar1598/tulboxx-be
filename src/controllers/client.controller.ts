@@ -30,7 +30,8 @@ export class ClientController {
       let query = supabase
         .from("clients")
         .select("*", { count: "exact", head: true })
-        .eq("user_id", user_id);
+        .eq("user_id", user_id)
+        .order("created_at", { ascending: false }); // Add this line to sort by newest first
 
       if (filterId) {
         query = query.eq("id", filterId);
@@ -44,7 +45,8 @@ export class ClientController {
       let dataQuery = supabase
         .from("clients")
         .select("*")
-        .eq("user_id", user_id);
+        .eq("user_id", user_id)
+        .order("created_at", { ascending: false }); // Add this line to sort by newest first
 
       if (limit !== -1) {
         const startIndex = (page - 1) * limit;
