@@ -14,7 +14,6 @@ var transporter = nodejsmailer.createTransport({
 });
 
 export async function sendEmail(invoiceData: any) {
-  console.log("invoiceData", invoiceData);
   const client = await supabase
     .from("clients")
     .select("*")
@@ -81,8 +80,8 @@ export async function sendEmail(invoiceData: any) {
         </tr>
         
         ${
-          invoiceData.lineItems && Array.isArray(invoiceData.lineItems)
-            ? invoiceData.lineItems
+          invoiceData.line_items && Array.isArray(invoiceData.line_items)
+            ? invoiceData.line_items
                 .map(
                   (item: any) => `
             <tr>
@@ -119,7 +118,7 @@ export async function sendEmail(invoiceData: any) {
       </table>
       
       ${
-        invoiceData.invoiceSummary
+        invoiceData.invoice_summary
           ? `
         <div style="margin-bottom: 20px;">
           <h4 style="color: #007bff;">INVOICE SUMMARY</h4>
@@ -130,16 +129,16 @@ export async function sendEmail(invoiceData: any) {
       }
       
       ${
-        invoiceData.remitPayment
+        invoiceData.remit_payment
           ? `
         <div style="margin-bottom: 20px;">
           <h4 style="color: #007bff;">PAYMENT INFORMATION</h4>
         </div>
         <p>Please make all payments to the following bank account:</p>
-        <p>Account Name: ${invoiceData.remitPayment.accountName}</p>
-        <p>Account Number: ${invoiceData.remitPayment.accountNumber}</p>
-        <p>Routing Number: ${invoiceData.remitPayment.routingNumber}</p>
-        <p>Tax ID: ${invoiceData.remitPayment.taxId}</p>
+        <p>Account Name: ${invoiceData.remit_payment.accountName}</p>
+        <p>Account Number: ${invoiceData.remit_payment.accountNumber}</p>
+        <p>Routing Number: ${invoiceData.remit_payment.routingNumber}</p>
+        <p>Tax ID: ${invoiceData.remit_payment.taxId}</p>
       `
           : ""
       }
