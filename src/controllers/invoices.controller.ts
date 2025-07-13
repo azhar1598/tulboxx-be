@@ -113,80 +113,75 @@ export class InvoicesController {
   async getInvoices(req: Request, res: Response) {
     try {
       const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 20;
-      const startIndex = (page - 1) * limit;
-
-      const status = req.query.status as string | undefined;
+      const limit = parseInt(req.query.pageSize as string) || 10;
       const search = req.query.search as string | undefined;
+      const sortBy = req.query.sortBy as string[] | string | undefined;
+      const filterId = req.query["filter.id"] as string | undefined;
 
-      console.log("status", status);
-      console.log("search-->", search);
+      let sortColumn = "created_at";
+      let sortDirection = "desc";
+
+      const allowedSortColumns = [
+        "invoice_number",
+        "status",
+        "client_name", // Note: These are derived/joined, ensure your function handles them
+        "project_name",
+        "invoice_total_amount",
+        "issue_date",
+        "due_date",
+        "created_at",
+      ];
+
+      if (sortBy) {
+        const sortParam = Array.isArray(sortBy) ? sortBy[0] : sortBy;
+        const [column, direction] = sortParam.split(":");
+        if (
+          column &&
+          allowedSortColumns.includes(column) &&
+          direction &&
+          (direction.toUpperCase() === "ASC" ||
+            direction.toUpperCase() === "DESC")
+        ) {
+          sortColumn = column;
+          sortDirection = direction.toLowerCase();
+        }
+      }
 
       const user_id = req.user?.id;
       if (!user_id) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      let countQuery = supabase
-        .from("invoices")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", user_id);
+      const { data, error } = await supabase.rpc("search_invoices", {
+        user_id_arg: user_id,
+        search_term: search || null,
+        filter_id_arg: filterId || null,
+        page_num: page,
+        page_size: limit,
+        sort_column: sortColumn,
+        sort_direction: sortDirection,
+      });
 
-      // Only apply status filter if status is not 'all'
-      if (status && status !== "all") {
-        countQuery = countQuery.eq("status", status);
-      }
-
-      if (search) {
-        // Only search in invoice_number
-        // countQuery = countQuery
-        //   .ilike("invoice_number", `%${search}%`)
-        //   .ilike("invoice_total_amount", `%${Number(search)}%`);
-        countQuery = countQuery.or(
-          `invoice_number.ilike.%${search}%, invoice_total_amount.eq.${
-            isNaN(Number(search)) ? 0 : Number(search)
-          }`
-        );
-      }
-
-      const { count, error: countError } = await countQuery;
-      if (countError) {
-        console.error("Count query error:", countError);
-        throw countError;
-      }
-
-      let dataQuery = supabase
-        .from("invoices")
-        .select(
-          `
-          *,
-          client:clients!fk_invoice_client (*),
-          project:estimates!project_id (*)
-        `
-        )
-        .eq("user_id", user_id)
-        .order("created_at", { ascending: false });
-
-      // Only apply status filter if status is not 'all'
-      if (status && status !== "all") {
-        dataQuery = dataQuery.eq("status", status);
-      }
-
-      if (search) {
-        // Only search in invoice_number
-        dataQuery = dataQuery.ilike("invoice_number", `%${search}%`);
-      }
-
-      // Apply pagination after all filters
-      dataQuery = dataQuery.range(startIndex, startIndex + limit - 1);
-
-      const { data, error } = await dataQuery;
       if (error) {
-        console.error("Data query error:", error);
+        console.error("Error fetching invoices:", error);
         throw error;
       }
 
-      const totalRecords = count || 0;
+      const { data: countData, error: countError } = await supabase.rpc(
+        "search_invoices_count",
+        {
+          user_id_arg: user_id,
+          search_term: search || null,
+          filter_id_arg: filterId || null,
+        }
+      );
+
+      if (countError) {
+        console.error("Error fetching invoices count:", countError);
+        throw countError;
+      }
+
+      const totalRecords = countData || 0;
       const totalPages = Math.ceil(totalRecords / limit);
 
       return res.status(200).json({
