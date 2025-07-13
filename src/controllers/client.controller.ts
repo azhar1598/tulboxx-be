@@ -8,7 +8,10 @@ const clientSchema = z.object({
   email: z.string().email("Invalid email address"),
   phone: z.number().min(10, "Phone number is required"),
   address: z.string().min(1, "Address is required"),
-  user_id: z.string(),
+  city: z.string().min(1, "City is required"),
+  state: z.string().min(1, "State is required"),
+  zip: z.number().min(1, "Zip code is required"),
+  notes: z.string().optional(),
 });
 
 export class ClientController {
@@ -18,6 +21,37 @@ export class ClientController {
       const limit = parseInt(req.query.limit as string) || 10;
       const filterId = req.query["filter.id"] as string | undefined;
       const search = req.query["search"] as string | undefined;
+      const sortBy = req.query.sortBy as string[] | string | undefined;
+
+      let sortColumn = "created_at";
+      let sortDirection = "desc";
+
+      const allowedSortColumns = [
+        "name",
+        "email",
+        "phone",
+        "address",
+        "city",
+        "state",
+        "zip",
+        "created_at",
+      ];
+
+      if (sortBy) {
+        // Handle array format for sortBy, e.g., sortBy[]=name:ASC
+        const sortParam = Array.isArray(sortBy) ? sortBy[0] : sortBy;
+        const [column, direction] = sortParam.split(":");
+        if (
+          column &&
+          allowedSortColumns.includes(column) &&
+          direction &&
+          (direction.toUpperCase() === "ASC" ||
+            direction.toUpperCase() === "DESC")
+        ) {
+          sortColumn = column;
+          sortDirection = direction.toLowerCase();
+        }
+      }
 
       // Get authenticated user ID
       const user_id = req.user?.id;
@@ -26,43 +60,58 @@ export class ClientController {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      // Build the query with filtering
-      let query = supabase
-        .from("clients")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", user_id)
-        .order("created_at", { ascending: false }); // Add this line to sort by newest first
+      let data, count;
 
-      if (filterId) {
-        query = query.eq("id", filterId);
+      // Use RPC when a search term is provided, even if empty.
+      if (search || search === "") {
+        const { data: rpcData, error } = await supabase.rpc(
+          "search_clients_by_user",
+          {
+            user_id_arg: user_id,
+            search_term: search,
+            page_num: page,
+            page_size: limit,
+            filter_id_arg: filterId,
+            sort_column: sortColumn,
+            sort_direction: sortDirection,
+          }
+        );
+
+        if (error) throw error;
+        data = rpcData;
+
+        const { data: countData, error: countError } = await supabase.rpc(
+          "search_clients_by_user_count",
+          {
+            user_id_arg: user_id,
+            search_term: search,
+            filter_id_arg: filterId,
+          }
+        );
+        if (countError) throw countError;
+        count = countData;
+      } else {
+        // Original logic for non-search requests
+        let query = supabase
+          .from("clients")
+          .select("*", { count: "exact" })
+          .eq("user_id", user_id)
+          .order(sortColumn, { ascending: sortDirection === "asc" });
+
+        if (filterId) {
+          query = query.eq("id", filterId);
+        }
+
+        if (limit !== -1) {
+          const startIndex = (page - 1) * limit;
+          query = query.range(startIndex, startIndex + limit - 1);
+        }
+
+        const { data: queryData, count: queryCount, error } = await query;
+        if (error) throw error;
+        data = queryData;
+        count = queryCount;
       }
-
-      // Get total count of records
-      const { count, error: countError } = await query;
-      if (countError) throw countError;
-
-      // Fetch data with or without pagination
-      let dataQuery = supabase
-        .from("clients")
-        .select("*")
-        .eq("user_id", user_id)
-        .order("created_at", { ascending: false }); // Add this line to sort by newest first
-
-      if (limit !== -1) {
-        const startIndex = (page - 1) * limit;
-        dataQuery = dataQuery.range(startIndex, startIndex + limit - 1);
-      }
-
-      if (filterId) {
-        dataQuery = dataQuery.eq("id", filterId);
-      }
-
-      if (search) {
-        dataQuery = dataQuery.ilike("name", `%${search}%`);
-      }
-
-      const { data, error } = await dataQuery;
-      if (error) throw error;
 
       // Calculate pagination metadata only if pagination is enabled
       const response: any = { data };
@@ -149,10 +198,7 @@ export class ClientController {
       }
 
       const dataToInsert = {
-        name: clientData.name,
-        email: clientData.email,
-        phone: clientData.phone,
-        address: clientData.address,
+        ...clientData,
         user_id: user_id,
         created_at: new Date().toISOString(),
       };
@@ -267,10 +313,7 @@ export class ClientController {
       const { data, error } = await supabase
         .from("clients")
         .update({
-          name: clientData.name,
-          email: clientData.email,
-          phone: clientData.phone,
-          address: clientData.address,
+          ...clientData,
           updated_at: new Date().toISOString(),
         })
         .eq("id", id)
