@@ -5,7 +5,7 @@ import notificationRouter from "./notification.routes";
 import startupRouter from "./startup.routes";
 
 import startupPublicRouter from "./public/startup.routes";
-import jobRouter from "./jobRouter";
+import jobRouter from "./job.routes";
 import jobPublicRouter from "./public/jobs.routes";
 import estimatePublicRouter from "./public/estimates.routes";
 import estimatesRouter from "./estimates.routes";
@@ -29,6 +29,7 @@ routes.use("/invoices", authMiddleware, invoicesRouter);
 routes.use("/content", authMiddleware, contentRouter);
 routes.use("/user-profile", authMiddleware, userProfileRouter);
 routes.use("/clients", authMiddleware, clientRouter);
+routes.use("/jobs", authMiddleware, jobRouter);
 routes.use("/payment-info", authMiddleware, paymentRouter);
 
 const publicRoutes = Router();

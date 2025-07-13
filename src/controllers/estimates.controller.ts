@@ -105,63 +105,86 @@ export class EstimatesController {
       // Extract pagination parameters from query
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.pageSize as string) || 10;
-      const startIndex = (page - 1) * limit;
 
-      // Extract filter parameters
+      // Extract filter and sort parameters
       const filterId = req.query["filter.id"] as string | undefined;
       const search = req.query["search"] as string | undefined;
+      const sortBy = req.query.sortBy as string[] | string | undefined;
 
-      console.log("req.user.id", req.user, req);
+      let sortColumn = "created_at";
+      let sortDirection = "desc";
 
-      // Get authenticated user ID (modify this based on your auth setup)
-      const user_id = req.user?.id; // Ensure this is available from your auth middleware
+      const allowedSortColumns = [
+        "projectName",
+        "type",
+        "total_amount",
+        "created_at",
+        "projectStartDate",
+        "projectEndDate",
+      ];
+
+      if (sortBy) {
+        const sortParam = Array.isArray(sortBy) ? sortBy[0] : sortBy;
+        const [column, direction] = sortParam.split(":");
+        if (
+          column &&
+          allowedSortColumns.includes(column) &&
+          direction &&
+          (direction.toUpperCase() === "ASC" ||
+            direction.toUpperCase() === "DESC")
+        ) {
+          sortColumn = column;
+          sortDirection = direction.toLowerCase();
+        }
+      }
+
+      // Get authenticated user ID
+      const user_id = req.user?.id;
       if (!user_id) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      // Build the query with filtering
-      let query = supabase
-        .from("estimates")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", user_id)
-        .order("created_at", { ascending: false }); // Add this line to sort by newest first
+      // Use RPC to fetch estimates
+      const { data: rpcData, error: rpcError } = await supabase.rpc(
+        "search_estimates",
+        {
+          user_id_arg: user_id,
+          search_term: search || null,
+          filter_id_arg: filterId || null,
+          page_num: page,
+          page_size: limit,
+          sort_column: sortColumn,
+          sort_direction: sortDirection,
+        }
+      );
 
-      if (filterId) {
-        query = query.eq("id", filterId);
+      if (rpcError) {
+        console.error("Error fetching estimates via RPC:", rpcError);
+        throw rpcError;
       }
+      const data = rpcData;
 
-      const { count, error: countError } = await query;
-      if (countError) throw countError;
+      // Use RPC to fetch the total count
+      const { data: countData, error: countError } = await supabase.rpc(
+        "search_estimates_count",
+        {
+          user_id_arg: user_id,
+          search_term: search || null,
+          filter_id_arg: filterId || null,
+        }
+      );
 
-      // Fetch paginated data with filter
-      let dataQuery = supabase
-        .from("estimates")
-        .select(
-          `
-          *,
-          clients:client_id (*)
-        `
-        )
-        .eq("user_id", user_id)
-        .range(startIndex, startIndex + limit - 1)
-        .order("created_at", { ascending: false }); // Add this line to sort by newest first
-
-      if (filterId) {
-        dataQuery = dataQuery.eq("id", filterId);
+      if (countError) {
+        console.error("Error fetching estimates count via RPC:", countError);
+        throw countError;
       }
-
-      if (search) {
-        dataQuery = dataQuery.ilike("projectName", `%${search}%`);
-      }
-
-      const { data, error } = await dataQuery;
-      if (error) throw error;
+      const count = countData;
 
       // Calculate pagination metadata
       const totalRecords = count || 0;
       const totalPages = Math.ceil(totalRecords / limit);
 
-      // Prepare the response with data and metadata
+      // Prepare the response
       const response = {
         data,
         metadata: {
