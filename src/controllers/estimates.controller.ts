@@ -12,11 +12,10 @@ const lineItemSchema = z.object({
   totalPrice: z.number(),
 });
 
-const estimationSchema = z.object({
+const comprehensiveEstimationSchema = z.object({
   // General form
   projectName: z.string().min(1, "Project name is required"),
   clientId: z.string().min(1, "Client is required"),
-  type: z.string().min(1, "Type is required"),
   name: z.string().optional(),
 
   // Project form
@@ -34,6 +33,20 @@ const estimationSchema = z.object({
   user_id: z.string(),
   ai_generated_estimate: z.string().optional(),
 });
+
+const quickEstimateSchema = z.object({
+  projectName: z.string().min(1, "Project name is required"),
+  projectEstimate: z.coerce.number().min(1, "Project estimate is required"),
+  clientId: z.string().min(1, "Client is required"),
+  additionalNotes: z.string().optional(),
+  user_id: z.string(),
+  name: z.string().optional(),
+});
+
+const estimateSchema = z.union([
+  comprehensiveEstimationSchema,
+  quickEstimateSchema,
+]);
 
 export class EstimatesController {
   // async getEstimates(req: Request, res: Response) {
@@ -266,7 +279,11 @@ export class EstimatesController {
 
   async createEstimate(req: Request, res: Response) {
     try {
-      const validationResult = estimationSchema.safeParse(req.body);
+      const type = req.query.type as string;
+      const validationSchema =
+        type === "quick" ? quickEstimateSchema : comprehensiveEstimationSchema;
+
+      const validationResult = validationSchema.safeParse(req.body);
 
       if (!validationResult.success) {
         return res.status(400).json({
@@ -274,7 +291,6 @@ export class EstimatesController {
           details: validationResult.error.format(),
         });
       }
-      console.log("validationResult---->", validationResult);
 
       const estimateData = validationResult.data;
 
@@ -295,32 +311,57 @@ export class EstimatesController {
       // Transform the data for database insertion - convert clientId to client_id
       const { clientId, ...otherData } = estimateData;
 
-      let generatedEstimate;
-      try {
-        generatedEstimate = await generateEstimateWithGemini(estimateData);
-      } catch (apiError: any) {
-        console.error("Gemini API error:", apiError);
-        return res.status(500).json({
-          error: "Failed to generate content with AI",
-          details: apiError.message,
-        });
+      let dataToInsert;
+
+      if (type === "quick") {
+        const { projectEstimate, ...restOfQuickData } = otherData as Omit<
+          z.infer<typeof quickEstimateSchema>,
+          "clientId"
+        >;
+
+        dataToInsert = {
+          ...restOfQuickData,
+          client_id: clientId,
+          total_amount: projectEstimate,
+          user_id: req.user?.id,
+          created_at: new Date().toISOString(),
+        };
+      } else {
+        const comprehensiveData = otherData as Omit<
+          z.infer<typeof comprehensiveEstimationSchema>,
+          "clientId"
+        >;
+
+        let generatedEstimate;
+        try {
+          generatedEstimate = await generateEstimateWithGemini(
+            estimateData as any
+          );
+        } catch (apiError: any) {
+          console.error("Gemini API error:", apiError);
+          return res.status(500).json({
+            error: "Failed to generate content with AI",
+            details: apiError.message,
+          });
+        }
+
+        // Calculate total amount from line items
+        const totalAmount = comprehensiveData.lineItems.reduce(
+          (sum, item) => sum + item.totalPrice,
+          0
+        );
+
+        // Add metadata with the correct field name for the database
+        dataToInsert = {
+          ...comprehensiveData,
+          client_id: clientId, // Convert from clientId to client_id
+          ai_generated_estimate: generatedEstimate,
+          total_amount: totalAmount,
+          user_id: req.user?.id,
+          created_at: new Date().toISOString(),
+          type: type || "comprehensive",
+        };
       }
-
-      // Calculate total amount from line items
-      const totalAmount = estimateData.lineItems.reduce(
-        (sum, item) => sum + item.totalPrice,
-        0
-      );
-
-      // Add metadata with the correct field name for the database
-      const dataToInsert = {
-        ...otherData,
-        client_id: clientId, // Convert from clientId to client_id
-        ai_generated_estimate: generatedEstimate,
-        total_amount: totalAmount,
-        user_id: estimateData.user_id,
-        created_at: new Date().toISOString(),
-      };
 
       // Insert into database
       const { data, error } = await supabase
@@ -488,7 +529,10 @@ export class EstimatesController {
       }
 
       // Validate the request body
-      const validationResult = estimationSchema.safeParse(req.body);
+      const type = req.query.type as string;
+      const validationSchema =
+        type === "quick" ? quickEstimateSchema : comprehensiveEstimationSchema;
+      const validationResult = validationSchema.safeParse(req.body);
 
       if (!validationResult.success) {
         return res.status(400).json({
@@ -499,25 +543,45 @@ export class EstimatesController {
 
       const updateData = validationResult.data;
 
-      // Calculate total amount from line items if they exist in the update
-      let totalAmount = existingEstimate.total_amount; // Default to existing total
-      if (updateData.lineItems) {
-        totalAmount = updateData.lineItems.reduce(
-          (sum, item) => sum + item.totalPrice,
-          0
-        );
-      }
-
-      // Prepare data for update - handle clientId conversion if present
       const { clientId, ...otherData } = updateData;
+      let dataToUpdate;
 
-      const dataToUpdate = {
-        ...otherData,
-        ai_generated_estimate: updateData?.ai_generated_estimate,
-        ...(clientId && { client_id: clientId }), // Only include if clientId exists in the update
-        ...(updateData.lineItems && { total_amount: totalAmount }), // Only update total if line items changed
-        updated_at: new Date().toISOString(),
-      };
+      if (type === "quick") {
+        const { projectEstimate, ...restOfQuickData } = otherData as Omit<
+          z.infer<typeof quickEstimateSchema>,
+          "clientId"
+        >;
+
+        dataToUpdate = {
+          ...restOfQuickData,
+          ...(clientId && { client_id: clientId }),
+          total_amount: projectEstimate,
+          updated_at: new Date().toISOString(),
+          type: "quick",
+        };
+      } else {
+        const comprehensiveData = otherData as Omit<
+          z.infer<typeof comprehensiveEstimationSchema>,
+          "clientId"
+        >;
+
+        let totalAmount = existingEstimate.total_amount;
+        if (comprehensiveData.lineItems) {
+          totalAmount = comprehensiveData.lineItems.reduce(
+            (sum, item) => sum + item.totalPrice,
+            0
+          );
+        }
+
+        dataToUpdate = {
+          ...comprehensiveData,
+          ai_generated_estimate: comprehensiveData.ai_generated_estimate,
+          ...(clientId && { client_id: clientId }),
+          total_amount: totalAmount,
+          updated_at: new Date().toISOString(),
+          type: type || "comprehensive",
+        };
+      }
 
       // Update the estimate
       const { data, error } = await supabase

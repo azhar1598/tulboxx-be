@@ -41,17 +41,35 @@ export async function generateContentWithGemini(contentData: any) {
 
   `;
 
-  try {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+  const models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.0-pro"];
+  let lastError: any;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
-  } catch (error) {
-    console.error("Error calling Gemini API:", error);
-    throw new Error("Failed to generate content with Gemini API");
+  for (const modelName of models) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      if (text) {
+        return text;
+      }
+    } catch (error) {
+      lastError = error;
+      console.error(
+        `Error calling Gemini API with model ${modelName} for content generation:`,
+        error
+      );
+    }
   }
+
+  console.error(
+    "All models failed to generate content. Last error:",
+    lastError
+  );
+  throw new Error(
+    "Failed to generate content with Gemini API after trying multiple models."
+  );
 }
 
 export async function generateEstimateWithGemini(estimateData: any) {
@@ -90,15 +108,14 @@ please provide the data in json format with key as {projectOverview:"", scopeOfW
 the json format and nothing else. follow this json format strictly.
 `;
 
-  try {
-    const startDate = new Date(estimateData.projectStartDate);
-    const endDate = new Date(estimateData.projectEndDate);
-    const durationDays = Math.ceil(
-      (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
-    );
-    const durationWeeks = Math.ceil(durationDays / 7);
+  const startDate = new Date(estimateData.projectStartDate);
+  const endDate = new Date(estimateData.projectEndDate);
+  const durationDays = Math.ceil(
+    (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  const durationWeeks = Math.ceil(durationDays / 7);
 
-    const fullPrompt = `
+  const fullPrompt = `
       ${context}
       
       Project Details:
@@ -113,14 +130,32 @@ the json format and nothing else. follow this json format strictly.
       - Materials: ${estimateData.equipmentMaterials}
       - Additional Notes: ${estimateData.additionalNotes}
     `;
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+  const models = ["gemini-1.5-flash", "gemini-1.0-pro"];
+  let lastError: any;
 
-    const result = await model.generateContent(fullPrompt);
-    const response = await result.response;
-    return response.text();
-  } catch (error) {
-    console.error("Error calling Gemini API:", error);
-    throw new Error("Failed to generate content with Gemini API");
+  for (const modelName of models) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(fullPrompt);
+      const response = await result.response;
+      const text = response.text();
+      if (text) {
+        return text;
+      }
+    } catch (error) {
+      lastError = error;
+      console.error(
+        `Error calling Gemini API with model ${modelName} for estimate generation:`,
+        error
+      );
+    }
   }
+  console.error(
+    "All models failed to generate estimate. Last error:",
+    lastError
+  );
+  throw new Error(
+    "Failed to generate estimate with Gemini API after trying multiple models."
+  );
 }
