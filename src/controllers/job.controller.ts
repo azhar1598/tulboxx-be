@@ -4,21 +4,28 @@ import { z } from "zod";
 
 // Define the schema for job validation
 const jobSchema = z.object({
-  name: z.string().min(1, { message: "Job name is required" }),
-  type: z.string().min(1, { message: "Job type is required" }),
-  customer: z.string().uuid({ message: "Invalid customer ID" }),
+  name: z.string().min(1, { message: "Job title is required" }),
+  type: z.string().optional(),
+  customer: z.preprocess((val) => {
+    if (val === "" || val === null || val === undefined) return null;
+    return val;
+  }, z.string().uuid({ message: "Invalid customer ID" }).nullable().optional()),
   description: z.string().optional(),
-  date: z.coerce.date(),
+  date: z.preprocess((val) => {
+    if (val === "" || val === null || val === undefined) return null;
+    const d = new Date(val as any);
+    return isNaN(d.getTime()) ? null : d;
+  }, z.date().nullable().optional()),
   amount: z.preprocess((val) => {
     if (val === "" || val === null || val === undefined) return null;
     const num = Number(val);
     return isNaN(num) ? null : num;
-  }, z.number().positive({ message: "Amount must be positive" }).nullable().optional()),
+  }, z.number().nonnegative({ message: "Amount must be non-negative" }).nullable().optional()),
   hours: z.preprocess((val) => {
     if (val === "" || val === null || val === undefined) return null;
     const num = Number(val);
     return isNaN(num) ? null : num;
-  }, z.number().positive({ message: "Hours must be positive" }).nullable().optional()),
+  }, z.number().nonnegative({ message: "Hours must be non-negative" }).nullable().optional()),
   notes: z.string().optional(),
 });
 
