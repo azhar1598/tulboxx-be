@@ -113,7 +113,7 @@ export class InvoicesController {
   async getInvoices(req: Request, res: Response) {
     try {
       const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.pageSize as string) || 10;
+      const limit = parseInt(req.query.limit as string) || 10;
       const search = req.query.search as string | undefined;
       const sortBy = req.query.sortBy as string[] | string | undefined;
       const filterId = req.query["filter.id"] as string | undefined;
@@ -167,34 +167,37 @@ export class InvoicesController {
         throw error;
       }
 
-      const { data: countData, error: countError } = await supabase.rpc(
-        "search_invoices_count",
-        {
-          user_id_arg: user_id,
-          search_term: search || null,
-          filter_id_arg: filterId || null,
+      const response: any = { data };
+
+      if (limit !== -1) {
+        const { data: countData, error: countError } = await supabase.rpc(
+          "search_invoices_count",
+          {
+            user_id_arg: user_id,
+            search_term: search || null,
+            filter_id_arg: filterId || null,
+          }
+        );
+
+        if (countError) {
+          console.error("Error fetching invoices count:", countError);
+          throw countError;
         }
-      );
 
-      if (countError) {
-        console.error("Error fetching invoices count:", countError);
-        throw countError;
-      }
+        const totalRecords = countData || 0;
+        const totalPages = Math.ceil(totalRecords / limit);
 
-      const totalRecords = countData || 0;
-      const totalPages = Math.ceil(totalRecords / limit);
-
-      return res.status(200).json({
-        data,
-        metadata: {
+        response.metadata = {
           totalRecords,
           recordsPerPage: limit,
           currentPage: page,
           totalPages,
           hasNextPage: page < totalPages,
           hasPreviousPage: page > 1,
-        },
-      });
+        };
+      }
+
+      return res.status(200).json(response);
     } catch (error) {
       console.error("Error fetching invoices:", error);
       return res.status(500).json({ error: "Failed to fetch invoices" });

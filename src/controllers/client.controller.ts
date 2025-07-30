@@ -5,12 +5,12 @@ import { z } from "zod";
 // Define the schema for validation
 const clientSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  email: z.string().email("Invalid email address"),
-  phone: z.number().min(10, "Phone number is required"),
-  address: z.string().min(1, "Address is required"),
-  city: z.string().min(1, "City is required"),
-  state: z.string().min(1, "State is required"),
-  zip: z.number().min(1, "Zip code is required"),
+  email: z.string().email("Invalid email address").or(z.literal("")).optional(),
+  phone: z.union([z.string(), z.number()]).optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zip: z.union([z.string(), z.number()]).optional(),
   notes: z.string().optional(),
 });
 
@@ -160,52 +160,70 @@ export class ClientController {
       }
 
       // Check if email already exists for this user
-      const { data: existingEmailClient, error: emailCheckError } =
-        await supabase
-          .from("clients")
-          .select("id")
-          .eq("email", clientData.email)
-          .eq("user_id", user_id)
-          .maybeSingle();
+      if (clientData.email && clientData.email.trim() !== "") {
+        const { data: existingEmailClient, error: emailCheckError } =
+          await supabase
+            .from("clients")
+            .select("id")
+            .eq("email", clientData.email)
+            .eq("user_id", user_id)
+            .maybeSingle();
 
-      if (emailCheckError) throw emailCheckError;
+        if (emailCheckError) throw emailCheckError;
 
-      if (existingEmailClient) {
-        return res.status(409).json({
-          error: "Validation failed",
-          details: { email: ["Email address already in use"] },
-          message: `A client with the email address "${clientData.email}" already exists in your account.`,
-        });
+        if (existingEmailClient) {
+          return res.status(409).json({
+            error: "Validation failed",
+            details: { email: ["Email address already in use"] },
+            message: `A client with the email address "${clientData.email}" already exists in your account.`,
+          });
+        }
       }
 
       // Check if phone already exists for this user
-      const { data: existingPhoneClient, error: phoneCheckError } =
-        await supabase
-          .from("clients")
-          .select("id")
-          .eq("phone", clientData.phone)
-          .eq("user_id", user_id)
-          .maybeSingle();
+      if (clientData.phone) {
+        const phoneStr = String(clientData.phone).trim();
+        if (phoneStr !== "") {
+          const { data: existingPhoneClient, error: phoneCheckError } =
+            await supabase
+              .from("clients")
+              .select("id")
+              .eq("phone", clientData.phone)
+              .eq("user_id", user_id)
+              .maybeSingle();
 
-      if (phoneCheckError) throw phoneCheckError;
+          if (phoneCheckError) throw phoneCheckError;
 
-      if (existingPhoneClient) {
-        return res.status(409).json({
-          error: "Validation failed",
-          details: { phone: ["Phone number already in use"] },
-          message: `A client with the phone number "${clientData.phone}" already exists in your account.`,
-        });
+          if (existingPhoneClient) {
+            return res.status(409).json({
+              error: "Validation failed",
+              details: { phone: ["Phone number already in use"] },
+              message: `A client with the phone number "${clientData.phone}" already exists in your account.`,
+            });
+          }
+        }
       }
 
-      const dataToInsert = {
-        ...clientData,
-        user_id: user_id,
-        created_at: new Date().toISOString(),
-      };
+      const dataToInsert = { ...clientData };
+
+      // Convert empty strings to null to avoid unique constraint violations
+      if (dataToInsert.email === "") {
+        (dataToInsert as any).email = null;
+      }
+      if (
+        dataToInsert.phone !== undefined &&
+        String(dataToInsert.phone).trim() === ""
+      ) {
+        (dataToInsert as any).phone = null;
+      }
 
       const { data, error } = await supabase
         .from("clients")
-        .insert(dataToInsert)
+        .insert({
+          ...dataToInsert,
+          user_id: user_id,
+          created_at: new Date().toISOString(),
+        })
         .select();
 
       if (error) {
@@ -309,11 +327,74 @@ export class ClientController {
 
       const clientData = validationResult.data;
 
+      // Check for email uniqueness if it's being changed
+      if (
+        clientData.email &&
+        clientData.email.trim() !== "" &&
+        clientData.email !== existingClient.email
+      ) {
+        const { data: existingEmailClient, error: emailCheckError } =
+          await supabase
+            .from("clients")
+            .select("id")
+            .eq("email", clientData.email)
+            .eq("user_id", user_id)
+            .neq("id", id) // Exclude the current client
+            .maybeSingle();
+
+        if (emailCheckError) throw emailCheckError;
+
+        if (existingEmailClient) {
+          return res.status(409).json({
+            error: "Validation failed",
+            details: { email: ["Email address already in use"] },
+            message: `A client with the email address "${clientData.email}" already exists in your account.`,
+          });
+        }
+      }
+
+      // Check for phone uniqueness if it's being changed
+      if (clientData.phone && clientData.phone !== existingClient.phone) {
+        const phoneStr = String(clientData.phone).trim();
+        if (phoneStr !== "") {
+          const { data: existingPhoneClient, error: phoneCheckError } =
+            await supabase
+              .from("clients")
+              .select("id")
+              .eq("phone", clientData.phone)
+              .eq("user_id", user_id)
+              .neq("id", id) // Exclude the current client
+              .maybeSingle();
+
+          if (phoneCheckError) throw phoneCheckError;
+
+          if (existingPhoneClient) {
+            return res.status(409).json({
+              error: "Validation failed",
+              details: { phone: ["Phone number already in use"] },
+              message: `A client with the phone number "${clientData.phone}" already exists in your account.`,
+            });
+          }
+        }
+      }
+
+      const updateData = { ...clientData };
+      // Convert empty strings to null
+      if (updateData.email === "") {
+        (updateData as any).email = null;
+      }
+      if (
+        updateData.phone !== undefined &&
+        String(updateData.phone).trim() === ""
+      ) {
+        (updateData as any).phone = null;
+      }
+
       // Update in database
       const { data, error } = await supabase
         .from("clients")
         .update({
-          ...clientData,
+          ...updateData,
           updated_at: new Date().toISOString(),
         })
         .eq("id", id)

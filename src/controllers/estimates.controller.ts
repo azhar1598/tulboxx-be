@@ -117,7 +117,7 @@ export class EstimatesController {
     try {
       // Extract pagination parameters from query
       const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.pageSize as string) || 10;
+      const limit = parseInt(req.query.limit as string) || 10;
 
       // Extract filter and sort parameters
       const filterId = req.query["filter.id"] as string | undefined;
@@ -158,57 +158,54 @@ export class EstimatesController {
       }
 
       // Use RPC to fetch estimates
-      const { data: rpcData, error: rpcError } = await supabase.rpc(
-        "search_estimates",
-        {
-          user_id_arg: user_id,
-          search_term: search || null,
-          filter_id_arg: filterId || null,
-          page_num: page,
-          page_size: limit,
-          sort_column: sortColumn,
-          sort_direction: sortDirection,
-        }
-      );
+      const { data, error: rpcError } = await supabase.rpc("search_estimates", {
+        user_id_arg: user_id,
+        search_term: search || null,
+        filter_id_arg: filterId || null,
+        page_num: page,
+        page_size: limit,
+        sort_column: sortColumn,
+        sort_direction: sortDirection,
+      });
 
       if (rpcError) {
         console.error("Error fetching estimates via RPC:", rpcError);
         throw rpcError;
       }
-      const data = rpcData;
 
-      // Use RPC to fetch the total count
-      const { data: countData, error: countError } = await supabase.rpc(
-        "search_estimates_count",
-        {
-          user_id_arg: user_id,
-          search_term: search || null,
-          filter_id_arg: filterId || null,
+      const response: any = { data };
+
+      if (limit !== -1) {
+        // Use RPC to fetch the total count
+        const { data: countData, error: countError } = await supabase.rpc(
+          "search_estimates_count",
+          {
+            user_id_arg: user_id,
+            search_term: search || null,
+            filter_id_arg: filterId || null,
+          }
+        );
+
+        if (countError) {
+          console.error("Error fetching estimates count via RPC:", countError);
+          throw countError;
         }
-      );
+        const count = countData;
 
-      if (countError) {
-        console.error("Error fetching estimates count via RPC:", countError);
-        throw countError;
-      }
-      const count = countData;
+        // Calculate pagination metadata
+        const totalRecords = count || 0;
+        const totalPages = Math.ceil(totalRecords / limit);
 
-      // Calculate pagination metadata
-      const totalRecords = count || 0;
-      const totalPages = Math.ceil(totalRecords / limit);
-
-      // Prepare the response
-      const response = {
-        data,
-        metadata: {
+        // Prepare the response
+        response.metadata = {
           totalRecords,
           recordsPerPage: limit,
           currentPage: page,
           totalPages,
           hasNextPage: page < totalPages,
           hasPreviousPage: page > 1,
-        },
-      };
+        };
+      }
 
       return res.status(200).json(response);
     } catch (error) {

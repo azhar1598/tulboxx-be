@@ -15,6 +15,7 @@ import authRouter from "./auth.routes";
 import userProfileRouter from "./user.routes";
 import clientRouter from "./client.routes";
 import paymentRouter from "./payment.routes";
+import pipelineRouter from "./pipeline.routes";
 
 const routes = Router();
 
@@ -31,6 +32,7 @@ routes.use("/user-profile", authMiddleware, userProfileRouter);
 routes.use("/clients", authMiddleware, clientRouter);
 routes.use("/jobs", authMiddleware, jobRouter);
 routes.use("/payment-info", authMiddleware, paymentRouter);
+routes.use("/pipeline", authMiddleware, pipelineRouter);
 
 const publicRoutes = Router();
 const authRoutes = Router();
