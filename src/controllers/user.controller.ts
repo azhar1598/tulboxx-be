@@ -13,6 +13,7 @@ const userProfileSchema = z.object({
   jobTitle: z.string().optional(),
   industry: z.string().optional(),
   companySize: z.string().optional(),
+  logo: z.string().url("Invalid logo URL").optional(),
   currentPassword: z.string().optional(),
   newPassword: z.string().optional(),
   emailNotifications: z.boolean(),
@@ -51,6 +52,7 @@ export class UserController {
         companySize: data.company_size,
         phone: data.phone,
         address: data.address,
+        logo: data.logo,
       };
 
       return res.status(200).json(formattedData);
@@ -76,6 +78,7 @@ export class UserController {
         plan: z.string().optional(),
         industry: z.string().optional(),
         jobTitle: z.string().optional(),
+        logo: z.string().url("Invalid logo URL").optional(),
       });
 
       const validationResult = updateProfileSchema.safeParse(req.body);
@@ -97,6 +100,7 @@ export class UserController {
         plan: profileData.plan,
         industry: profileData.industry,
         job_title: profileData.jobTitle,
+        logo: profileData.logo,
       };
 
       // Remove undefined values
@@ -131,6 +135,7 @@ export class UserController {
         plan: data[0].plan,
         industry: data[0].industry,
         jobTitle: data[0].job_title,
+        logo: data[0].logo,
       };
 
       return res.status(200).json({
@@ -197,6 +202,7 @@ export class UserController {
         jobTitle: user.job_title,
         industry: user.industry,
         companySize: user.company_size,
+        logo: user.logo,
         emailNotifications: user.email_notifications,
         smsNotifications: user.sms_notifications,
         role: user.role,
@@ -271,6 +277,7 @@ export class UserController {
         jobTitle: data.job_title,
         industry: data.industry,
         companySize: data.company_size,
+        logo: data.logo,
         emailNotifications: data.email_notifications,
         smsNotifications: data.sms_notifications,
         role: data.role,
