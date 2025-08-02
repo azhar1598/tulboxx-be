@@ -30,7 +30,6 @@ const comprehensiveEstimationSchema = z.object({
   // Additional fields
   equipmentMaterials: z.string(),
   additionalNotes: z.string(),
-  user_id: z.string(),
   ai_generated_estimate: z.string().optional(),
 });
 
@@ -39,7 +38,6 @@ const quickEstimateSchema = z.object({
   projectEstimate: z.coerce.number().min(1, "Project estimate is required"),
   clientId: z.string().min(1, "Client is required"),
   additionalNotes: z.string().optional(),
-  user_id: z.string(),
   name: z.string().optional(),
 });
 
@@ -527,6 +525,8 @@ export class EstimatesController {
 
       // Validate the request body
       const type = req.query.type as string;
+
+      console.log("type----", type);
       const validationSchema =
         type === "quick" ? quickEstimateSchema : comprehensiveEstimationSchema;
       const validationResult = validationSchema.safeParse(req.body);
@@ -554,6 +554,7 @@ export class EstimatesController {
           ...(clientId && { client_id: clientId }),
           total_amount: projectEstimate,
           updated_at: new Date().toISOString(),
+          user_id: req.user?.id,
           type: "quick",
         };
       } else {
@@ -561,7 +562,7 @@ export class EstimatesController {
           z.infer<typeof comprehensiveEstimationSchema>,
           "clientId"
         >;
-
+        console.log("comprehensiveData----", comprehensiveData);
         let totalAmount = existingEstimate.total_amount;
         if (comprehensiveData.lineItems) {
           totalAmount = comprehensiveData.lineItems.reduce(
@@ -572,10 +573,10 @@ export class EstimatesController {
 
         dataToUpdate = {
           ...comprehensiveData,
-          ai_generated_estimate: comprehensiveData.ai_generated_estimate,
           ...(clientId && { client_id: clientId }),
           total_amount: totalAmount,
           updated_at: new Date().toISOString(),
+          user_id: req.user?.id,
           type: type || "comprehensive",
         };
       }
