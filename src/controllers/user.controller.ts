@@ -36,8 +36,10 @@ export class UserController {
         .eq("id", userId)
         .single();
 
+        console.log("userId", error,userId);
+
       if (error) {
-        return res.status(500).json({ error: "Failed to fetch user profile" });
+        return res.status(500).json({ error: error });
       }
 
       // Format and return the user data
