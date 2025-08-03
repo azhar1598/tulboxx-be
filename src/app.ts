@@ -9,7 +9,7 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:3000", // Local dev
   "https://tulboxx.vercel.app", // Deployed frontend
-  "https://app.tulboxx.com/"
+  "https://app.tulboxx.com"
 
 ];
 
