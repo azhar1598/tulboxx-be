@@ -30,7 +30,7 @@ app.use(
 app.use(express.json());
 
 app.get("/", (req, res) => {
-  res.send("Hurrah, Backend is running! 🎉");
+  res.send("I am running! 🎉");
 });
 
 app.use("/", protectedRoutes);
