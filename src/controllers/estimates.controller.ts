@@ -26,6 +26,7 @@ const comprehensiveEstimationSchema = z.object({
   projectStartDate: z.string(),
   projectEndDate: z.string(),
   lineItems: z.array(lineItemSchema),
+  projectType: z.enum(["residential", "commercial"]), // Changed from project_type
 
   // Additional fields
   equipmentMaterials: z.string(),
@@ -39,6 +40,7 @@ const quickEstimateSchema = z.object({
   clientId: z.string().min(1, "Client is required"),
   additionalNotes: z.string().optional(),
   name: z.string().optional(),
+  projectType: z.enum(["residential", "commercial"]), // Changed from project_type
 });
 
 const estimateSchema = z.union([
@@ -289,6 +291,9 @@ export class EstimatesController {
 
       const estimateData = validationResult.data;
 
+      // Map projectType to project_type
+      const project_type = req.body.projectType;
+
       // Verify that the client exists before proceeding
       const { data: clientData, error: clientError } = await supabase
         .from("clients")
@@ -304,14 +309,14 @@ export class EstimatesController {
       }
 
       // Transform the data for database insertion - convert clientId to client_id
-      const { clientId, ...otherData } = estimateData;
+      const { clientId, projectType, ...otherData } = estimateData;
 
       let dataToInsert;
 
       if (type === "quick") {
         const { projectEstimate, ...restOfQuickData } = otherData as Omit<
           z.infer<typeof quickEstimateSchema>,
-          "clientId"
+          "clientId" | "projectType"
         >;
 
         dataToInsert = {
@@ -320,11 +325,12 @@ export class EstimatesController {
           total_amount: projectEstimate,
           user_id: req.user?.id,
           created_at: new Date().toISOString(),
+          project_type: projectType, // Map projectType to project_type
         };
       } else {
         const comprehensiveData = otherData as Omit<
           z.infer<typeof comprehensiveEstimationSchema>,
-          "clientId"
+          "clientId" | "projectType"
         >;
 
         let generatedEstimate;
@@ -355,6 +361,7 @@ export class EstimatesController {
           user_id: req.user?.id,
           created_at: new Date().toISOString(),
           type: type || "comprehensive",
+          project_type: projectType, // Map projectType to project_type
         };
       }
 
@@ -525,8 +532,6 @@ export class EstimatesController {
 
       // Validate the request body
       const type = req.query.type as string;
-
-      console.log("type----", type);
       const validationSchema =
         type === "quick" ? quickEstimateSchema : comprehensiveEstimationSchema;
       const validationResult = validationSchema.safeParse(req.body);
@@ -539,6 +544,9 @@ export class EstimatesController {
       }
 
       const updateData = validationResult.data;
+
+      // Map projectType to project_type
+      const project_type = req.body.projectType;
 
       const { clientId, ...otherData } = updateData;
       let dataToUpdate;
@@ -556,13 +564,14 @@ export class EstimatesController {
           updated_at: new Date().toISOString(),
           user_id: req.user?.id,
           type: "quick",
+          project_type, // Use mapped project_type
         };
       } else {
         const comprehensiveData = otherData as Omit<
           z.infer<typeof comprehensiveEstimationSchema>,
           "clientId"
         >;
-        console.log("comprehensiveData----", comprehensiveData);
+
         let totalAmount = existingEstimate.total_amount;
         if (comprehensiveData.lineItems) {
           totalAmount = comprehensiveData.lineItems.reduce(
@@ -578,6 +587,7 @@ export class EstimatesController {
           updated_at: new Date().toISOString(),
           user_id: req.user?.id,
           type: type || "comprehensive",
+          project_type, // Use mapped project_type
         };
       }
 
