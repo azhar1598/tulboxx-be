@@ -54,7 +54,7 @@ export class UserController {
         companySize: data.company_size,
         phone: data.phone,
         address: data.address,
-        logo: data.logo,
+        logo: data.logo || null,
       };
 
       return res.status(200).json(formattedData);
@@ -279,7 +279,7 @@ export class UserController {
         jobTitle: data.job_title,
         industry: data.industry,
         companySize: data.company_size,
-        logo: data.logo,
+        logo: data.logo || null,
         emailNotifications: data.email_notifications,
         smsNotifications: data.sms_notifications,
         role: data.role,

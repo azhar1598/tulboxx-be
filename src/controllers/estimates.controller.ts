@@ -26,7 +26,7 @@ const comprehensiveEstimationSchema = z.object({
   projectStartDate: z.string(),
   projectEndDate: z.string(),
   lineItems: z.array(lineItemSchema),
-  projectType: z.enum(["residential", "commercial"]), // Changed from project_type
+  projectType: z.enum(["residential", "commercial"]).optional(), // Made optional
 
   // Additional fields
   equipmentMaterials: z.string(),
@@ -40,7 +40,7 @@ const quickEstimateSchema = z.object({
   clientId: z.string().min(1, "Client is required"),
   additionalNotes: z.string().optional(),
   name: z.string().optional(),
-  projectType: z.enum(["residential", "commercial"]), // Changed from project_type
+  projectType: z.enum(["residential", "commercial"]).optional(), // Made optional
 });
 
 const estimateSchema = z.union([
