@@ -8,12 +8,15 @@ const userProfileSchema = z.object({
   fullName: z.string().min(1, "Full name is required"),
   email: z.string().email("Invalid email address").min(1, "Email is required"),
   phone: z.string().min(1, "Phone number is required"),
-  address: z.string().min(1, "Address is required"),
+  streetAddress: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zip: z.string().optional(),
   companyName: z.string().optional(),
   jobTitle: z.string().optional(),
   industry: z.string().optional(),
   companySize: z.string().optional(),
-  logo: z.string().url("Invalid logo URL").optional(),
+  logo: z.string().optional(),
   currentPassword: z.string().optional(),
   newPassword: z.string().optional(),
   emailNotifications: z.boolean(),
@@ -36,11 +39,13 @@ export class UserController {
         .eq("id", userId)
         .single();
 
-        console.log("userId", error,userId);
+        console.log("userId", error, userId);
 
       if (error) {
         return res.status(500).json({ error: error });
       }
+
+      const addressParts = data.address ? data.address.split(", ") : [];
 
       // Format and return the user data
       const formattedData = {
@@ -53,7 +58,10 @@ export class UserController {
         industry: data.industry,
         companySize: data.company_size,
         phone: data.phone,
-        address: data.address,
+        streetAddress: addressParts[0] || "",
+        city: addressParts[1] || "",
+        state: addressParts[2] || "",
+        zip: addressParts[3] || "",
         logo: data.logo || null,
       };
 
@@ -74,13 +82,17 @@ export class UserController {
 
       // Define validation schema for company details only
       const updateProfileSchema = z.object({
+        phone: z.string().optional(),
         companyName: z.string().optional(),
         companySize: z.string().optional(),
-        address: z.string().optional(),
+        streetAddress: z.string().optional(),
+        city: z.string().optional(),
+        state: z.string().optional(),
+        zip: z.string().optional(),
         plan: z.string().optional(),
         industry: z.string().optional(),
         jobTitle: z.string().optional(),
-        logo: z.string().url("Invalid logo URL").optional(),
+        logo: z.string().optional(),
       });
 
       const validationResult = updateProfileSchema.safeParse(req.body);
@@ -94,11 +106,22 @@ export class UserController {
 
       const profileData = validationResult.data;
 
+      const addressParts = [
+        profileData.streetAddress,
+        profileData.city,
+        profileData.state,
+        profileData.zip,
+      ].filter(Boolean);
+
+      const address =
+        addressParts.length > 0 ? addressParts.join(", ") : undefined;
+
       // Format data to match database schema
       const formattedData: any = {
+        phone: profileData.phone,
         company_name: profileData.companyName,
         company_size: profileData.companySize,
-        address: profileData.address,
+        address: address,
         plan: profileData.plan,
         industry: profileData.industry,
         job_title: profileData.jobTitle,
@@ -131,6 +154,7 @@ export class UserController {
       // Format response
       const responseData = {
         id: data[0].id,
+        phone: data[0].phone,
         companyName: data[0].company_name,
         companySize: data[0].company_size,
         address: data[0].address,
@@ -193,24 +217,30 @@ export class UserController {
       const totalPages = Math.ceil(totalRecords / limit);
 
       // Format response to match frontend schema
-      const formattedData = data.map((user) => ({
-        id: user.id,
-        userId: user.id || user.id,
-        fullName: user.full_name,
-        email: user.email,
-        phone: user.phone,
-        address: user.address,
-        companyName: user.company_name,
-        jobTitle: user.job_title,
-        industry: user.industry,
-        companySize: user.company_size,
-        logo: user.logo,
-        emailNotifications: user.email_notifications,
-        smsNotifications: user.sms_notifications,
-        role: user.role,
-        createdAt: user.created_at,
-        updatedAt: user.updated_at,
-      }));
+      const formattedData = data.map((user) => {
+        const addressParts = user.address ? user.address.split(", ") : [];
+        return {
+          id: user.id,
+          userId: user.id || user.id,
+          fullName: user.full_name,
+          email: user.email,
+          phone: user.phone,
+          streetAddress: addressParts[0] || "",
+          city: addressParts[1] || "",
+          state: addressParts[2] || "",
+          zip: addressParts[3] || "",
+          companyName: user.company_name,
+          jobTitle: user.job_title,
+          industry: user.industry,
+          companySize: user.company_size,
+          logo: user.logo,
+          emailNotifications: user.email_notifications,
+          smsNotifications: user.sms_notifications,
+          role: user.role,
+          createdAt: user.created_at,
+          updatedAt: user.updated_at,
+        };
+      });
 
       const response = {
         data: formattedData,
@@ -267,6 +297,8 @@ export class UserController {
         throw error;
       }
 
+      const addressParts = data.address ? data.address.split(", ") : [];
+
       // Format response to match frontend schema
       const formattedData = {
         id: data.id,
@@ -274,7 +306,10 @@ export class UserController {
         fullName: data.full_name,
         email: data.email,
         phone: data.phone,
-        address: data.address,
+        streetAddress: addressParts[0] || "",
+        city: addressParts[1] || "",
+        state: addressParts[2] || "",
+        zip: addressParts[3] || "",
         companyName: data.company_name,
         jobTitle: data.job_title,
         industry: data.industry,
