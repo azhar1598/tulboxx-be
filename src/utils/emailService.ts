@@ -9,9 +9,11 @@ var transporter = nodejsmailer.createTransport({
   port: 465,
   auth: {
     user: "mohammedazhar.1598@gmail.com",
-    pass: "afixxnfiupnrpknz",
+    pass: "",
   },
 });
+
+// afixxnfiupnrpknz
 
 export async function sendEmail(invoiceData: any) {
   const client = await supabase
