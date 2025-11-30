@@ -5,13 +5,17 @@ import { z } from "zod";
 // Define the schema for job validation
 const jobSchema = z.object({
   name: z.string().min(1, { message: "Job title is required" }),
-  type: z.string().optional(),
   customer: z.preprocess((val) => {
     if (val === "" || val === null || val === undefined) return null;
     return val;
   }, z.string().uuid({ message: "Invalid customer ID" }).nullable().optional()),
   description: z.string().optional(),
-  date: z.preprocess((val) => {
+  start_date: z.preprocess((val) => {
+    if (val === "" || val === null || val === undefined) return null;
+    const d = new Date(val as any);
+    return isNaN(d.getTime()) ? null : d;
+  }, z.date().nullable().optional()),
+  end_date: z.preprocess((val) => {
     if (val === "" || val === null || val === undefined) return null;
     const d = new Date(val as any);
     return isNaN(d.getTime()) ? null : d;
@@ -21,11 +25,6 @@ const jobSchema = z.object({
     const num = Number(val);
     return isNaN(num) ? null : num;
   }, z.number().nonnegative({ message: "Amount must be non-negative" }).nullable().optional()),
-  hours: z.preprocess((val) => {
-    if (val === "" || val === null || val === undefined) return null;
-    const num = Number(val);
-    return isNaN(num) ? null : num;
-  }, z.number().nonnegative({ message: "Hours must be non-negative" }).nullable().optional()),
   notes: z.string().optional(),
 });
 
@@ -42,8 +41,8 @@ export class JobController {
 
       const allowedSortColumns = [
         "name",
-        "type",
-        "date",
+        "start_date",
+        "end_date",
         "amount",
         "created_at",
       ];

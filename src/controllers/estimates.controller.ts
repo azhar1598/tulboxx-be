@@ -1,7 +1,10 @@
 import { Request, Response } from "express";
 import { supabase } from "../supabaseClient";
 import { z } from "zod";
-import { generateEstimateWithGemini } from "../utils/aiService";
+import {
+  generateEstimateWithGemini,
+  generateQuickEstimateWithGemini,
+} from "../utils/aiService";
 
 // Define the schema for validation
 const lineItemSchema = z.object({
@@ -36,11 +39,13 @@ const comprehensiveEstimationSchema = z.object({
 
 const quickEstimateSchema = z.object({
   projectName: z.string().min(1, "Project name is required"),
-  projectEstimate: z.coerce.number().min(1, "Project estimate is required"),
   clientId: z.string().min(1, "Client is required"),
+  projectType: z.enum(["residential", "commercial"]),
+  problemDescription: z.string().min(1, "Problem description is required"),
+  solutionDescription: z.string().min(1, "Solution description is required"),
   additionalNotes: z.string().optional(),
   name: z.string().optional(),
-  projectType: z.enum(["residential", "commercial"]).optional(), // Made optional
+  projectEstimate: z.coerce.number().optional(),
 });
 
 const estimateSchema = z.union([
@@ -314,18 +319,28 @@ export class EstimatesController {
       let dataToInsert;
 
       if (type === "quick") {
-        const { projectEstimate, ...restOfQuickData } = otherData as Omit<
-          z.infer<typeof quickEstimateSchema>,
-          "clientId" | "projectType"
-        >;
+        let generatedEstimate;
+        try {
+          generatedEstimate = await generateQuickEstimateWithGemini(estimateData);
+        } catch (apiError: any) {
+          console.error("Gemini API error:", apiError);
+          return res.status(500).json({
+            error: "Failed to generate content with AI",
+            details: apiError.message,
+          });
+        }
+
+        const { total_amount, ...overviewFields } = generatedEstimate;
 
         dataToInsert = {
-          ...restOfQuickData,
+          ...otherData,
           client_id: clientId,
-          total_amount: projectEstimate,
+          total_amount: total_amount,
+          ai_generated_estimate: JSON.stringify(overviewFields),
           user_id: req.user?.id,
           created_at: new Date().toISOString(),
           project_type: projectType, // Map projectType to project_type
+          type: "quick",
         };
       } else {
         const comprehensiveData = otherData as Omit<
@@ -552,7 +567,20 @@ export class EstimatesController {
       let dataToUpdate;
 
       if (type === "quick") {
-        const { projectEstimate, ...restOfQuickData } = otherData as Omit<
+        let generatedEstimate;
+        try {
+          generatedEstimate = await generateQuickEstimateWithGemini(updateData);
+        } catch (apiError: any) {
+          console.error("Gemini API error:", apiError);
+          return res.status(500).json({
+            error: "Failed to generate content with AI",
+            details: apiError.message,
+          });
+        }
+
+        const { total_amount, ...overviewFields } = generatedEstimate;
+
+        const { ...restOfQuickData } = otherData as Omit<
           z.infer<typeof quickEstimateSchema>,
           "clientId"
         >;
@@ -560,7 +588,8 @@ export class EstimatesController {
         dataToUpdate = {
           ...restOfQuickData,
           ...(clientId && { client_id: clientId }),
-          total_amount: projectEstimate,
+          total_amount: total_amount,
+          ai_generated_estimate: JSON.stringify(overviewFields),
           updated_at: new Date().toISOString(),
           user_id: req.user?.id,
           type: "quick",

@@ -72,6 +72,75 @@ export async function generateContentWithGemini(contentData: any) {
   );
 }
 
+export async function generateQuickEstimateWithGemini(estimateData: any) {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error("Gemini API key is not configured");
+  }
+
+  const prompt = `
+    Generate a professional and detailed project description for a quick estimate based on the following project information.
+    The response should be a JSON object containing a project overview, scope of work, timeline, pricing details, and a total estimated cost.
+    Do not include any extra text, explanations, or formatting—only return valid JSON.
+
+    The JSON object must be in the following format:
+    {
+      "projectOverview": "string",
+      "scopeOfWork": "string",
+      "timeline": "string",
+      "pricing": "string",
+      "total_amount": number
+    }
+
+    Project Details:
+    - Project Name: ${estimateData.projectName}
+    - Project Type: ${estimateData.projectType}
+    - Problem Description: ${estimateData.problemDescription}
+    - Solution Description: ${estimateData.solutionDescription}
+    - Additional Notes: ${estimateData.additionalNotes || "None"}
+    ${
+      estimateData.projectEstimate
+        ? `- Customer's Estimated Budget: $${estimateData.projectEstimate}`
+        : ""
+    }
+  `;
+
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+  const models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.0-pro"];
+  let lastError: any;
+
+  for (const modelName of models) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+
+      if (text) {
+        // Clean the response to ensure it's valid JSON
+        const cleanedText = text
+          .replace(/```json/g, "")
+          .replace(/```/g, "")
+          .trim();
+        return JSON.parse(cleanedText);
+      }
+    } catch (error) {
+      lastError = error;
+      console.error(
+        `Error calling Gemini API with model ${modelName} for quick estimate generation:`,
+        error
+      );
+    }
+  }
+
+  console.error(
+    "All models failed to generate quick estimate. Last error:",
+    lastError
+  );
+  throw new Error(
+    "Failed to generate quick estimate with Gemini API after trying multiple models."
+  );
+}
+
 export async function generateEstimateWithGemini(estimateData: any) {
   if (!process.env.GEMINI_API_KEY) {
     throw new Error("Gemini API key is not configured");
@@ -131,7 +200,7 @@ the json format and nothing else. follow this json format strictly.
       - Additional Notes: ${estimateData.additionalNotes}
     `;
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-  const models = ["gemini-1.5-flash", "gemini-1.0-pro"];
+  const models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.0-pro"];
   let lastError: any;
 
   for (const modelName of models) {
