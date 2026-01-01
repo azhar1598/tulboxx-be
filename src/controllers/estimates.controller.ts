@@ -126,6 +126,18 @@ export class EstimatesController {
 
       // Extract filter and sort parameters
       const filterId = req.query["filter.id"] as string | undefined;
+      let filterClientId = req.query["filter.clientId"] as string | undefined;
+      let filterType = req.query["filter.type"] as string | undefined;
+
+      // Handle $eq: prefix if present
+      if (filterType && filterType.startsWith("$eq:")) {
+        filterType = filterType.substring(4);
+      }
+
+      if (filterClientId && filterClientId.startsWith("$eq:")) {
+        filterClientId = filterClientId.substring(4);
+      }
+      
       const search = req.query["search"] as string | undefined;
       const sortBy = req.query.sortBy as string[] | string | undefined;
 
@@ -167,6 +179,8 @@ export class EstimatesController {
         user_id_arg: user_id,
         search_term: search || null,
         filter_id_arg: filterId || null,
+        filter_type_arg: filterType || null,
+        filter_client_id_arg: filterClientId || null,
         page_num: page,
         page_size: limit,
         sort_column: sortColumn,
@@ -176,6 +190,58 @@ export class EstimatesController {
       if (rpcError) {
         console.error("Error fetching estimates via RPC:", rpcError);
         throw rpcError;
+      }
+
+      if (data && data.length > 0) {
+        const estimateIds = data.map((e: any) => e.id);
+
+        // Fetch associated invoices
+        const { data: invoices, error: invoiceError } = await supabase
+          .from("invoices")
+          .select("*")
+          .in("project_id", estimateIds);
+
+        if (invoiceError) {
+          console.error("Error fetching associated invoices:", invoiceError);
+        }
+
+        // Fetch associated jobs
+        // Note: Assuming 'project_id' exists on jobs table. If not, this will fail gracefully.
+        const { data: jobs, error: jobError } = await supabase
+          .from("jobs")
+          .select("*")
+          .in("project_id", estimateIds);
+
+        if (jobError) {
+          console.warn("Error fetching associated jobs (column might be missing):", jobError);
+        }
+
+        // Map associations
+        const invoicesMap = new Map();
+        if (invoices) {
+          invoices.forEach((inv: any) => {
+            if (!invoicesMap.has(inv.project_id)) {
+              invoicesMap.set(inv.project_id, []);
+            }
+            invoicesMap.get(inv.project_id).push(inv);
+          });
+        }
+
+        const jobsMap = new Map();
+        if (jobs) {
+          jobs.forEach((job: any) => {
+            if (!jobsMap.has(job.project_id)) {
+              jobsMap.set(job.project_id, []);
+            }
+            jobsMap.get(job.project_id).push(job);
+          });
+        }
+
+        // Attach to data
+        data.forEach((e: any) => {
+          e.invoices = invoicesMap.get(e.id) || [];
+          e.jobs = jobsMap.get(e.id) || [];
+        });
       }
 
       const response: any = { data };
@@ -188,6 +254,8 @@ export class EstimatesController {
             user_id_arg: user_id,
             search_term: search || null,
             filter_id_arg: filterId || null,
+            filter_type_arg: filterType || null,
+            filter_client_id_arg: filterClientId || null,
           }
         );
 

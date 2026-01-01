@@ -26,6 +26,10 @@ const jobSchema = z.object({
     return isNaN(num) ? null : num;
   }, z.number().nonnegative({ message: "Amount must be non-negative" }).nullable().optional()),
   notes: z.string().optional(),
+  project_id: z.preprocess((val) => {
+    if (val === "" || val === null || val === undefined) return null;
+    return val;
+  }, z.string().uuid({ message: "Invalid project ID" }).nullable().optional()),
 });
 
 export class JobController {
@@ -127,7 +131,7 @@ export class JobController {
         });
       }
 
-      const { customer, ...jobData } = validationResult.data;
+      const { customer, project_id, ...jobData } = validationResult.data;
       const user_id = req.user?.id;
 
       if (!user_id) {
@@ -137,6 +141,7 @@ export class JobController {
       const dataToInsert = {
         ...jobData,
         client_id: customer,
+        project_id: project_id,
         user_id: user_id,
       };
 
@@ -227,13 +232,14 @@ export class JobController {
         });
       }
 
-      const { customer, ...jobData } = validationResult.data;
+      const { customer, project_id, ...jobData } = validationResult.data;
 
       const { data, error } = await supabase
         .from("jobs")
         .update({
           ...jobData,
           client_id: customer,
+          project_id: project_id,
           updated_at: new Date().toISOString(),
         })
         .eq("id", id)

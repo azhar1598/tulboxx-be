@@ -6,3 +6,7 @@ DROP COLUMN date;
 ALTER TABLE public.jobs
 ADD COLUMN start_date TIMESTAMPTZ,
 ADD COLUMN end_date TIMESTAMPTZ;
+
+
+
+
