@@ -1,7 +1,10 @@
 import { Request, Response } from "express";
 import { supabase } from "../supabaseClient";
 import { z } from "zod";
-import { generateEstimateWithGemini } from "../utils/aiService";
+import {
+  generateEstimateWithGemini,
+  generateQuickEstimateWithGemini,
+} from "../utils/aiService";
 
 // Define the schema for validation
 const lineItemSchema = z.object({
@@ -36,11 +39,13 @@ const comprehensiveEstimationSchema = z.object({
 
 const quickEstimateSchema = z.object({
   projectName: z.string().min(1, "Project name is required"),
-  projectEstimate: z.coerce.number().min(1, "Project estimate is required"),
   clientId: z.string().min(1, "Client is required"),
+  projectType: z.enum(["residential", "commercial"]),
+  problemDescription: z.string().min(1, "Problem description is required"),
+  solutionDescription: z.string().min(1, "Solution description is required"),
   additionalNotes: z.string().optional(),
   name: z.string().optional(),
-  projectType: z.enum(["residential", "commercial"]).optional(), // Made optional
+  projectEstimate: z.coerce.number().optional(),
 });
 
 const estimateSchema = z.union([
@@ -121,6 +126,18 @@ export class EstimatesController {
 
       // Extract filter and sort parameters
       const filterId = req.query["filter.id"] as string | undefined;
+      let filterClientId = req.query["filter.clientId"] as string | undefined;
+      let filterType = req.query["filter.type"] as string | undefined;
+
+      // Handle $eq: prefix if present
+      if (filterType && filterType.startsWith("$eq:")) {
+        filterType = filterType.substring(4);
+      }
+
+      if (filterClientId && filterClientId.startsWith("$eq:")) {
+        filterClientId = filterClientId.substring(4);
+      }
+      
       const search = req.query["search"] as string | undefined;
       const sortBy = req.query.sortBy as string[] | string | undefined;
 
@@ -162,6 +179,8 @@ export class EstimatesController {
         user_id_arg: user_id,
         search_term: search || null,
         filter_id_arg: filterId || null,
+        filter_type_arg: filterType || null,
+        filter_client_id_arg: filterClientId || null,
         page_num: page,
         page_size: limit,
         sort_column: sortColumn,
@@ -171,6 +190,58 @@ export class EstimatesController {
       if (rpcError) {
         console.error("Error fetching estimates via RPC:", rpcError);
         throw rpcError;
+      }
+
+      if (data && data.length > 0) {
+        const estimateIds = data.map((e: any) => e.id);
+
+        // Fetch associated invoices
+        const { data: invoices, error: invoiceError } = await supabase
+          .from("invoices")
+          .select("*")
+          .in("project_id", estimateIds);
+
+        if (invoiceError) {
+          console.error("Error fetching associated invoices:", invoiceError);
+        }
+
+        // Fetch associated jobs
+        // Note: Assuming 'project_id' exists on jobs table. If not, this will fail gracefully.
+        const { data: jobs, error: jobError } = await supabase
+          .from("jobs")
+          .select("*")
+          .in("project_id", estimateIds);
+
+        if (jobError) {
+          console.warn("Error fetching associated jobs (column might be missing):", jobError);
+        }
+
+        // Map associations
+        const invoicesMap = new Map();
+        if (invoices) {
+          invoices.forEach((inv: any) => {
+            if (!invoicesMap.has(inv.project_id)) {
+              invoicesMap.set(inv.project_id, []);
+            }
+            invoicesMap.get(inv.project_id).push(inv);
+          });
+        }
+
+        const jobsMap = new Map();
+        if (jobs) {
+          jobs.forEach((job: any) => {
+            if (!jobsMap.has(job.project_id)) {
+              jobsMap.set(job.project_id, []);
+            }
+            jobsMap.get(job.project_id).push(job);
+          });
+        }
+
+        // Attach to data
+        data.forEach((e: any) => {
+          e.invoices = invoicesMap.get(e.id) || [];
+          e.jobs = jobsMap.get(e.id) || [];
+        });
       }
 
       const response: any = { data };
@@ -183,6 +254,8 @@ export class EstimatesController {
             user_id_arg: user_id,
             search_term: search || null,
             filter_id_arg: filterId || null,
+            filter_type_arg: filterType || null,
+            filter_client_id_arg: filterClientId || null,
           }
         );
 
@@ -314,18 +387,28 @@ export class EstimatesController {
       let dataToInsert;
 
       if (type === "quick") {
-        const { projectEstimate, ...restOfQuickData } = otherData as Omit<
-          z.infer<typeof quickEstimateSchema>,
-          "clientId" | "projectType"
-        >;
+        let generatedEstimate;
+        try {
+          generatedEstimate = await generateQuickEstimateWithGemini(estimateData);
+        } catch (apiError: any) {
+          console.error("Gemini API error:", apiError);
+          return res.status(500).json({
+            error: "Failed to generate content with AI",
+            details: apiError.message,
+          });
+        }
+
+        const { total_amount, ...overviewFields } = generatedEstimate;
 
         dataToInsert = {
-          ...restOfQuickData,
+          ...otherData,
           client_id: clientId,
-          total_amount: projectEstimate,
+          total_amount: total_amount,
+          ai_generated_estimate: JSON.stringify(overviewFields),
           user_id: req.user?.id,
           created_at: new Date().toISOString(),
           project_type: projectType, // Map projectType to project_type
+          type: "quick",
         };
       } else {
         const comprehensiveData = otherData as Omit<
@@ -552,7 +635,20 @@ export class EstimatesController {
       let dataToUpdate;
 
       if (type === "quick") {
-        const { projectEstimate, ...restOfQuickData } = otherData as Omit<
+        let generatedEstimate;
+        try {
+          generatedEstimate = await generateQuickEstimateWithGemini(updateData);
+        } catch (apiError: any) {
+          console.error("Gemini API error:", apiError);
+          return res.status(500).json({
+            error: "Failed to generate content with AI",
+            details: apiError.message,
+          });
+        }
+
+        const { total_amount, ...overviewFields } = generatedEstimate;
+
+        const { ...restOfQuickData } = otherData as Omit<
           z.infer<typeof quickEstimateSchema>,
           "clientId"
         >;
@@ -560,7 +656,8 @@ export class EstimatesController {
         dataToUpdate = {
           ...restOfQuickData,
           ...(clientId && { client_id: clientId }),
-          total_amount: projectEstimate,
+          total_amount: total_amount,
+          ai_generated_estimate: JSON.stringify(overviewFields),
           updated_at: new Date().toISOString(),
           user_id: req.user?.id,
           type: "quick",

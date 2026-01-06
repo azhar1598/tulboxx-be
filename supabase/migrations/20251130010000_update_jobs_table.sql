@@ -1,0 +1,12 @@
+ALTER TABLE public.jobs
+DROP COLUMN type,
+DROP COLUMN hours,
+DROP COLUMN date;
+
+ALTER TABLE public.jobs
+ADD COLUMN start_date TIMESTAMPTZ,
+ADD COLUMN end_date TIMESTAMPTZ;
+
+
+
+

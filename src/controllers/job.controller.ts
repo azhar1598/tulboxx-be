@@ -5,13 +5,17 @@ import { z } from "zod";
 // Define the schema for job validation
 const jobSchema = z.object({
   name: z.string().min(1, { message: "Job title is required" }),
-  type: z.string().optional(),
   customer: z.preprocess((val) => {
     if (val === "" || val === null || val === undefined) return null;
     return val;
   }, z.string().uuid({ message: "Invalid customer ID" }).nullable().optional()),
   description: z.string().optional(),
-  date: z.preprocess((val) => {
+  start_date: z.preprocess((val) => {
+    if (val === "" || val === null || val === undefined) return null;
+    const d = new Date(val as any);
+    return isNaN(d.getTime()) ? null : d;
+  }, z.date().nullable().optional()),
+  end_date: z.preprocess((val) => {
     if (val === "" || val === null || val === undefined) return null;
     const d = new Date(val as any);
     return isNaN(d.getTime()) ? null : d;
@@ -21,12 +25,11 @@ const jobSchema = z.object({
     const num = Number(val);
     return isNaN(num) ? null : num;
   }, z.number().nonnegative({ message: "Amount must be non-negative" }).nullable().optional()),
-  hours: z.preprocess((val) => {
-    if (val === "" || val === null || val === undefined) return null;
-    const num = Number(val);
-    return isNaN(num) ? null : num;
-  }, z.number().nonnegative({ message: "Hours must be non-negative" }).nullable().optional()),
   notes: z.string().optional(),
+  project_id: z.preprocess((val) => {
+    if (val === "" || val === null || val === undefined) return null;
+    return val;
+  }, z.string().uuid({ message: "Invalid project ID" }).nullable().optional()),
 });
 
 export class JobController {
@@ -42,8 +45,8 @@ export class JobController {
 
       const allowedSortColumns = [
         "name",
-        "type",
-        "date",
+        "start_date",
+        "end_date",
         "amount",
         "created_at",
       ];
@@ -79,6 +82,79 @@ export class JobController {
         )
         .eq("user_id", user_id)
         .order(sortColumn, { ascending: sortDirection === "asc" });
+
+      // Handle dynamic filters (e.g., filter.start_date=$gt:2026-01-05)
+      Object.keys(req.query).forEach((key) => {
+        if (key.startsWith("filter.")) {
+          let field = key.replace("filter.", "");
+
+          // Map frontend camelCase to DB snake_case
+          if (field === "clientId") field = "client_id";
+          if (field === "projectId") field = "project_id";
+
+          const rawValue = req.query[key];
+          const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+
+          values.forEach((val) => {
+            if (typeof val !== "string") return;
+
+            let operator = "$eq";
+            let value = val;
+
+            const separatorIndex = val.indexOf(":");
+            if (separatorIndex !== -1 && val.startsWith("$")) {
+              const potentialOp = val.substring(0, separatorIndex);
+              const validOps = [
+                "$eq",
+                "$gt",
+                "$gte",
+                "$lt",
+                "$lte",
+                "$neq",
+                "$ilike",
+                "$is",
+              ];
+              if (validOps.includes(potentialOp)) {
+                operator = potentialOp;
+                value = val.substring(separatorIndex + 1);
+              }
+            }
+
+            switch (operator) {
+              case "$eq":
+                query = query.eq(field, value);
+                break;
+              case "$gt":
+                query = query.gt(field, value);
+                break;
+              case "$gte":
+                query = query.gte(field, value);
+                break;
+              case "$lt":
+                query = query.lt(field, value);
+                break;
+              case "$lte":
+                query = query.lte(field, value);
+                break;
+              case "$neq":
+                query = query.neq(field, value);
+                break;
+              case "$ilike":
+                query = query.ilike(field, value);
+                break;
+              case "$is":
+                if (value.toLowerCase() === "null") {
+                  query = query.is(field, null);
+                } else if (value.toLowerCase() === "true") {
+                  query = query.is(field, true);
+                } else if (value.toLowerCase() === "false") {
+                  query = query.is(field, false);
+                }
+                break;
+            }
+          });
+        }
+      });
 
       if (search) {
         query = query.or(
@@ -128,7 +204,7 @@ export class JobController {
         });
       }
 
-      const { customer, ...jobData } = validationResult.data;
+      const { customer, project_id, ...jobData } = validationResult.data;
       const user_id = req.user?.id;
 
       if (!user_id) {
@@ -138,6 +214,7 @@ export class JobController {
       const dataToInsert = {
         ...jobData,
         client_id: customer,
+        project_id: project_id,
         user_id: user_id,
       };
 
@@ -228,13 +305,14 @@ export class JobController {
         });
       }
 
-      const { customer, ...jobData } = validationResult.data;
+      const { customer, project_id, ...jobData } = validationResult.data;
 
       const { data, error } = await supabase
         .from("jobs")
         .update({
           ...jobData,
           client_id: customer,
+          project_id: project_id,
           updated_at: new Date().toISOString(),
         })
         .eq("id", id)
