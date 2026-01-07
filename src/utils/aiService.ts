@@ -42,7 +42,12 @@ export async function generateContentWithGemini(contentData: any) {
   `;
 
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-  const models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.0-pro"];
+  const models = [
+    "gemini-flash-latest",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash-latest",
+    "gemini-pro-latest",
+  ];
   let lastError: any;
 
   for (const modelName of models) {
@@ -105,7 +110,12 @@ export async function generateQuickEstimateWithGemini(estimateData: any) {
   `;
 
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-  const models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.0-pro"];
+  const models = [
+    "gemini-flash-latest",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash-latest",
+    "gemini-pro-latest",
+  ];
   let lastError: any;
 
   for (const modelName of models) {
@@ -200,7 +210,12 @@ the json format and nothing else. follow this json format strictly.
       - Additional Notes: ${estimateData.additionalNotes}
     `;
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-  const models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.0-pro"];
+  const models = [
+    "gemini-flash-latest",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash-latest",
+    "gemini-pro-latest",
+  ];
   let lastError: any;
 
   for (const modelName of models) {
