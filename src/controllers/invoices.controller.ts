@@ -116,7 +116,21 @@ export class InvoicesController {
       const limit = parseInt(req.query.limit as string) || 10;
       const search = req.query.search as string | undefined;
       const sortBy = req.query.sortBy as string[] | string | undefined;
-      const filterId = req.query["filter.id"] as string | undefined;
+      const rawFilterId = req.query["filter.id"] as string | undefined;
+      const filterStatus = req.query["filter.status"] as string | undefined;
+      const filterProjectId = req.query["filter.project.id"] as string | undefined;
+      const filterClientId = req.query["filter.client.id"] as string | undefined;
+
+      const parseFilter = (val: string | undefined) => {
+        if (!val) return undefined;
+        if (val.startsWith("$eq:")) return val.substring(4);
+        return val;
+      };
+
+      const filterId = parseFilter(rawFilterId);
+      const parsedStatus = parseFilter(filterStatus);
+      const parsedProjectId = parseFilter(filterProjectId);
+      const parsedClientId = parseFilter(filterClientId);
 
       let sortColumn = "created_at";
       let sortDirection = "desc";
@@ -160,6 +174,9 @@ export class InvoicesController {
         page_size: limit,
         sort_column: sortColumn,
         sort_direction: sortDirection,
+        filter_status_arg: parsedStatus || null,
+        filter_project_id_arg: parsedProjectId || null,
+        filter_client_id_arg: parsedClientId || null,
       });
 
       if (error) {
@@ -176,6 +193,9 @@ export class InvoicesController {
             user_id_arg: user_id,
             search_term: search || null,
             filter_id_arg: filterId || null,
+            filter_status_arg: parsedStatus || null,
+            filter_project_id_arg: parsedProjectId || null,
+            filter_client_id_arg: parsedClientId || null,
           }
         );
 
