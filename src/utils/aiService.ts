@@ -156,36 +156,37 @@ export async function generateEstimateWithGemini(estimateData: any) {
     throw new Error("Gemini API key is not configured");
   }
 
-  const context = `
-Generate a professional and detailed project description for an estimate document based on the following project information. 
-The description should include:
-1. A compelling project overview that highlights the value to the customer
-2. A clear scope of work section with bullet points
-3. A concise timeline section mentioning the project duration
-4. A pricing section that presents the cost professionally
+  const prompt = `
+    Generate a professional and detailed project description for a ${estimateData.pricingType === "single" ? "single-price" : "line-item"} estimate document based on the following project information. 
+    The description should include:
+    1. A compelling project overview that highlights the value to the customer
+    2. A clear scope of work section with bullet points
+    3. A concise timeline section mentioning the project duration
+    4. A pricing section that presents the cost professionally
+    
+    Format the response exactly like this example:
+    ---
+    Project Overview
+    We are pleased to present this project estimate for your upcoming project. Our solution will effectively address your specific needs.
+    
+    Scope of Work
+    - First scope item
+    - Second scope item
+    - Third scope item
+    
+    Timeline
+    The project is expected to take X weeks for completion.
+    
+    Pricing
+    The total cost for the project is $X. This pricing is all-inclusive with no hidden fees.
+    ---
+    
+    Use the provided project details to personalize each section. Be specific about the type of work, customer pain points, and proposed solutions.
+    
+    please provide the data in json format with key as {projectOverview:"", scopeOfWork:"", timeline:"", pricing:""}. only 
+    the json format and nothing else. follow this json format strictly.
+  `;
 
-Format the response exactly like this example:
----
-Project Overview
-We are pleased to present this project estimate for your upcoming project. Our solution will effectively address your specific needs.
-
-Scope of Work
-- First scope item
-- Second scope item
-- Third scope item
-
-Timeline
-The project is expected to take X weeks for completion.
-
-Pricing
-The total cost for the project is $X. This pricing is all-inclusive with no hidden fees.
----
-
-Use the provided project details to personalize each section. Be specific about the type of work, customer pain points, and proposed solutions.
-
-please provide the data in json format with key as {projectOverview:"", scopeOfWork:"", timeline:"", pricing:""}. only 
-the json format and nothing else. follow this json format strictly.
-`;
 
   const startDate = new Date(estimateData.projectStartDate);
   const endDate = new Date(estimateData.projectEndDate);
@@ -194,8 +195,8 @@ the json format and nothing else. follow this json format strictly.
   );
   const durationWeeks = Math.ceil(durationDays / 7);
 
-  const fullPrompt = `
-      ${context}
+    const fullPrompt = `
+      ${prompt}
       
       Project Details:
       - Project Name: ${estimateData.projectName}
@@ -204,7 +205,8 @@ the json format and nothing else. follow this json format strictly.
       - Service: ${estimateData.serviceType}
       - Problem: ${estimateData.problemDescription}
       - Solution: ${estimateData.solutionDescription}
-      - Cost: $${estimateData.projectEstimate}
+      - Cost: $${estimateData.pricingType === "single" ? estimateData.projectEstimate : "Calculated from line items"}
+      - Pricing Method: ${estimateData.pricingType === "single" ? "Single Price" : "Line Item"}
       - Duration: ${durationDays} days (${durationWeeks} weeks)
       - Materials: ${estimateData.equipmentMaterials}
       - Additional Notes: ${estimateData.additionalNotes}

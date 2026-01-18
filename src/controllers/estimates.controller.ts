@@ -20,21 +20,33 @@ const comprehensiveEstimationSchema = z.object({
   projectName: z.string().min(1, "Project name is required"),
   clientId: z.string().min(1, "Client is required"),
   name: z.string().optional(),
+  pricingType: z.enum(["single", "line_item"]).default("single"),
 
   // Project form
   serviceType: z.string(),
   problemDescription: z.string(),
   solutionDescription: z.string(),
-  projectEstimate: z.number(),
+  projectEstimate: z.number().optional(), // Make optional here, validation logic handles it
   projectStartDate: z.string(),
   projectEndDate: z.string(),
-  lineItems: z.array(lineItemSchema),
+  lineItems: z.array(lineItemSchema).optional(),
   projectType: z.enum(["residential", "commercial"]).optional(), // Made optional
 
   // Additional fields
   equipmentMaterials: z.string(),
   additionalNotes: z.string(),
   ai_generated_estimate: z.string().optional(),
+}).refine((data) => {
+  if (data.pricingType === "single") {
+    return !!data.projectEstimate; // Required for single
+  }
+  if (data.pricingType === "line_item") {
+    return data.lineItems && data.lineItems.length > 0; // Required for line_item
+  }
+  return true;
+}, {
+  message: "Pricing details are missing based on the selected pricing type",
+  path: ["projectEstimate"], // Attach error to projectEstimate or lineItems
 });
 
 const quickEstimateSchema = z.object({
@@ -429,15 +441,32 @@ export class EstimatesController {
           });
         }
 
-        // Calculate total amount from line items
-        const totalAmount = comprehensiveData.lineItems.reduce(
-          (sum, item) => sum + item.totalPrice,
-          0
-        );
+        // Calculate total amount logic based on pricing type
+        let totalAmount = 0;
+        if (comprehensiveData.pricingType === "single") {
+          totalAmount = comprehensiveData.projectEstimate || 0;
+        } else if (comprehensiveData.lineItems) {
+           totalAmount = comprehensiveData.lineItems.reduce(
+            (sum, item) => sum + item.totalPrice,
+            0
+          );
+        }
+
+        // Destructure pricingType to exclude it from spread, capture other fields
+        const { pricingType, ...dbData } = comprehensiveData;
+
+        // Clean up data based on pricingType
+        if (pricingType === "single") {
+          // Remove lineItems if it's a single price estimate
+          delete (dbData as any).lineItems;
+        } else if (pricingType === "line_item") {
+          // Remove projectEstimate if it's a line item estimate (calculated from line items)
+          delete (dbData as any).projectEstimate;
+        }
 
         // Add metadata with the correct field name for the database
         dataToInsert = {
-          ...comprehensiveData,
+          ...dbData,
           client_id: clientId, // Convert from clientId to client_id
           ai_generated_estimate: generatedEstimate,
           total_amount: totalAmount,
@@ -445,6 +474,7 @@ export class EstimatesController {
           created_at: new Date().toISOString(),
           type: type || "comprehensive",
           project_type: projectType, // Map projectType to project_type
+          pricing_type: comprehensiveData.pricingType,
         };
       }
 
@@ -669,22 +699,41 @@ export class EstimatesController {
           "clientId"
         >;
 
+        // Calculate total amount based on pricing type
         let totalAmount = existingEstimate.total_amount;
-        if (comprehensiveData.lineItems) {
+        
+        if (comprehensiveData.pricingType === "single") {
+             if (comprehensiveData.projectEstimate !== undefined) {
+                 totalAmount = comprehensiveData.projectEstimate;
+             }
+        } else if (comprehensiveData.pricingType === "line_item" && comprehensiveData.lineItems) {
           totalAmount = comprehensiveData.lineItems.reduce(
             (sum, item) => sum + item.totalPrice,
             0
           );
         }
 
+        // Destructure pricingType to exclude it from spread, capture other fields
+        const { pricingType, ...dbData } = comprehensiveData;
+
+        // Clean up data based on pricingType
+        if (pricingType === "single") {
+          // Remove lineItems if it's a single price estimate
+          delete (dbData as any).lineItems;
+        } else if (pricingType === "line_item") {
+          // Remove projectEstimate if it's a line item estimate
+          delete (dbData as any).projectEstimate;
+        }
+
         dataToUpdate = {
-          ...comprehensiveData,
+          ...dbData,
           ...(clientId && { client_id: clientId }),
           total_amount: totalAmount,
           updated_at: new Date().toISOString(),
           user_id: req.user?.id,
           type: type || "comprehensive",
           project_type, // Use mapped project_type
+          pricing_type: comprehensiveData.pricingType,
         };
       }
 
